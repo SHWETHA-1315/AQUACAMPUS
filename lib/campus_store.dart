@@ -164,6 +164,29 @@ class CampusStore extends ChangeNotifier {
 
   /// Request a genuine Firebase password-reset email; no passwords or
   /// verification codes are stored in the campus database.
+  bool get emailVerified =>
+      FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+
+  Future<void> resendEmailVerification() async {
+    final current = FirebaseAuth.instance.currentUser;
+    if (!cloud || current == null) {
+      throw StateError('Sign in first to verify your email.');
+    }
+    if (current.emailVerified) return;
+    await current.sendEmailVerification();
+  }
+
+  Future<bool> refreshEmailVerification() async {
+    final current = FirebaseAuth.instance.currentUser;
+    if (!cloud || current == null) {
+      throw StateError('Sign in first.');
+    }
+    await current.reload();
+    final verified = FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+    notifyListeners();
+    return verified;
+  }
+
   Future<void> sendPasswordReset(String email) async {
     if (!cloud) throw StateError('Campus Firebase authentication is unavailable');
     final address = email.trim();
@@ -190,6 +213,9 @@ class CampusStore extends ChangeNotifier {
         'campusId': campusId,
         'createdAt': timestamp()
       });
+      // Verify ownership of the email before a trusted Firebase administrator
+      // can approve this account. Verification is a real Firebase email.
+      await result.user!.sendEmailVerification();
     } else {
       await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email.trim(), password: password);
