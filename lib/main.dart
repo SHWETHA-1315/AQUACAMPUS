@@ -365,6 +365,37 @@ class _EntryPageState extends State<EntryPage> {
                               : create ? 'Request campus account' : 'Sign in'),
                         ),
                         const SizedBox(height: 8),
+                        if (!create)
+                          TextButton.icon(
+                            onPressed: busy ? null : () async {
+                              if (!email.text.contains('@')) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text(
+                                    'Enter your registered email first.')),
+                                );
+                                return;
+                              }
+                              setState(() => busy = true);
+                              try {
+                                await store.sendPasswordReset(email.text);
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text(
+                                    'If this address is registered, check your email for a reset link.')),
+                                );
+                              } catch (error) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(
+                                    'Could not request reset: $error')),
+                                );
+                              } finally {
+                                if (mounted) setState(() => busy = false);
+                              }
+                            },
+                            icon: const Icon(Icons.key_outlined, size: 17),
+                            label: const Text('Forgot password?'),
+                          ),
                         TextButton(
                           onPressed: busy ? null : () => setState(() => create = !create),
                           child: Text(create
