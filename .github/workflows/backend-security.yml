@@ -1,0 +1,29 @@
+name: Verify AQUACAMPUS Firebase Backend Rules
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'firestore.rules'
+      - 'firebase.json'
+      - 'package.json'
+      - 'backend-tests/**'
+      - '.github/workflows/backend-security.yml'
+jobs:
+  firestore-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install Firebase emulator and testing SDK
+        run: npm install --no-audit --no-fund
+      - name: Run Firestore role/security tests against emulator
+        run: npm run test:emulator
