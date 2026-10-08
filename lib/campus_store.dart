@@ -199,7 +199,20 @@ class CampusStore extends ChangeNotifier {
     }
   }
 
+  void _clearCampusData() {
+    backendConnected = false;
+    facilities = [];
+    tanks = [];
+    requests = [];
+    notices = [];
+    sos = [];
+    people = [];
+    dailyUsage = [];
+    tankReadings = [];
+  }
+
   void _clearSubscriptions() {
+    _clearCampusData();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
@@ -213,15 +226,6 @@ class CampusStore extends ChangeNotifier {
     if (authUser == null) {
       signedIn = false;
       user = {};
-      facilities = [];
-      tanks = [];
-      requests = [];
-      notices = [];
-      sos = [];
-      people = [];
-      dailyUsage = [];
-      tankReadings = [];
-      backendConnected = false;
       notifyListeners();
       return;
     }
@@ -237,6 +241,11 @@ class CampusStore extends ChangeNotifier {
         _users.doc(authUser.uid).snapshots().listen((snapshot) {
       final newData = snapshot.data();
       if (newData == null) {
+        for (final subscription in _subscriptions) {
+          subscription.cancel();
+        }
+        _subscriptions.clear();
+        _clearCampusData();
         user = {
           'id': authUser.uid,
           'role': 'student',
@@ -250,7 +259,6 @@ class CampusStore extends ChangeNotifier {
       final oldRole = role;
       final oldFacility = myFacilityId;
       user = {...newData, 'id': snapshot.id};
-      notifyListeners();
       if (approved &&
           (!oldApproved ||
               oldRole != role ||
@@ -260,24 +268,23 @@ class CampusStore extends ChangeNotifier {
           s.cancel();
         }
         _subscriptions.clear();
-        backendConnected = false;
+        _clearCampusData();
         _subscribeCloud();
       } else if (!approved) {
         for (final s in _subscriptions) {
           s.cancel();
         }
         _subscriptions.clear();
-        facilities = [];
-        tanks = [];
-        requests = [];
-        notices = [];
-        sos = [];
-        people = [];
-        dailyUsage = [];
-      tankReadings = [];
-        notifyListeners();
+        _clearCampusData();
       }
+      notifyListeners();
     }, onError: (Object e) {
+      for (final subscription in _subscriptions) {
+        subscription.cancel();
+      }
+      _subscriptions.clear();
+      _clearCampusData();
+      user = {...user, 'approved': false};
       message = 'Profile read failed: $e';
       notifyListeners();
     });
