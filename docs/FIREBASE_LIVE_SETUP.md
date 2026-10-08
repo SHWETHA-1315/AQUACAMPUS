@@ -4,7 +4,9 @@
 
 **Android package name:** `com.example.aquacampus`
 
-**App architecture:** Native Flutter Android screens → Firebase Authentication → Cloud Firestore streams. There is no browser control portal, Render API, fake login or simulated water data. A physical water meter is not connected: actual authorised workers enter the tank depth.
+**App architecture:** Native Flutter Android screens → Firebase Authentication → Cloud Firestore streams.
+
+**Android registration verified:** the uploaded `google-services.json` belongs to project `aquacampus-ed284` with package `com.example.aquacampus`. Its public Firebase client settings are integrated into `lib/firebase_android_config.dart`, so you do **not** need to register the Android app again or copy that JSON file into the project for compilation. There is no browser control portal, Render API, fake login or simulated water data. A physical water meter is not connected: actual authorised workers enter the tank depth.
 
 ## One-time Google account setup
 
@@ -12,12 +14,12 @@ Open the existing [Firebase project overview](https://console.firebase.google.co
 
 1. **Authentication → Get started → Sign-in method → Email/Password → Enable → Save.**
 2. **Firestore Database → Create database**. Select a nearby regional location deliberately and choose **Production mode**. Avoid public/test rules. The default database is `(default)`.
-3. **Project settings** (gear icon) → **Your apps** → **Add app → Android**. Register **exact package name** `com.example.aquacampus`, nickname `AQUACAMPUS Android`. SHA-1 is not required for Firebase Email/Password auth. Do not create a Web app or a duplicate Firebase project.
-4. **Download `google-services.json`**, which contains the public Android Firebase project configuration. Place it at **`C:\AQUACAMPUS\android\app\google-services.json`**. Leave the Android app package name unchanged after registering it. This repository's Git ignore excludes the configuration file from Git commits. Never substitute a service-account/private-key JSON.
+3. **Project settings** (gear icon) → **Your apps** → **Android app**: verify the existing Android app has package `com.example.aquacampus`. Its registration has already been verified using the uploaded Firebase configuration. Don't register another app unless you deliberately change the Android package.
+4. **Firebase client config is already integrated:** `lib/firebase_android_config.dart` contains the public Android config values. The original `google-services.json` is not committed. No private service-account credentials are used. Keep the Android app package name unchanged.
 5. Run `cd C:\AQUACAMPUS` and `git pull origin main` (preserve any uncommitted local edits). Ensure Node.js is installed; run `npm install -g firebase-tools`.
 6. Run `.\SETUP_FIREBASE.ps1`. It authorizes your Google account, checks access to **aquacampus-ed284**, and lists registered Android apps. It does **not** create another project.
 7. After reviewing the Firestore rules in this repo, run `.\SETUP_FIREBASE.ps1 -DeployRules` and explicitly type `DEPLOY`. This publishes **only** `firestore.rules` to **aquacampus-ed284** using the authenticated Google account. It does not deploy a website. Confirm the deployed rules in Firestore Database → Rules. Deploying rules overwrites the existing Firestore rules in that project; review before doing this.
-8. Run `.\build_apk.ps1 -LiveFirebase`. The script reads the correct Android app entry in `google-services.json`, checks both project ID and package, runs Flutter tests and builds `release\AQUACAMPUS-FIREBASE-LIVE.apk`. It refuses missing/mismatched configuration. Android build depends on the Flutter and Android SDKs installed on the laptop.
+8. Run `.\build_apk.ps1 -LiveFirebase`. The script uses the already integrated Firebase Android options, runs Flutter analyze/tests, and builds `release\AQUACAMPUS-FIREBASE-LIVE.apk`. Android build depends on the Flutter and Android SDKs installed on the laptop. Alternatively download the latest successful APK artifact from GitHub Actions.
 
 **Important:** An uploaded `google-services.json` is an app configuration file (not an Admin SDK credential). Never share your Google password, private service-account keys or access/refresh tokens.
 
@@ -44,7 +46,7 @@ The first Admin must be granted from a trusted Firebase account; a new user cann
 
 ## Build limitations and safety
 
-- The **latest GitHub Actions APK job intentionally fails** until valid `FIREBASE_API_KEY`, `FIREBASE_APP_ID` (Android app ID), `FIREBASE_MESSAGING_SENDER_ID`, and `FIREBASE_PROJECT_ID` are supplied as Actions secrets; this prevents publishing a disconnected APK. The Windows `build_apk.ps1` works from the downloaded Android Firebase config without setting those variables manually.
+- The GitHub Actions job now builds an APK with the **verified public Firebase Android client config** already in the Flutter project; Actions secrets are not needed for these public client identifiers. A successful APK build **does not** enable Firebase Authentication or deploy Firestore rules. The first Administrator must still be securely bootstrapped.
 - The app stores real human inputs in Firestore, not physical telemetry. There is no tank sensor, remote valve, motor shutdown, water meter or background push system.
 - Keep secure rules under version control, review every change and monitor Firebase usage. No charges are requested by this setup; quota restrictions apply on the Spark plan.
 - For public distribution and Play Store updates, configure a private persistent Android release signing key; the current repo's default Gradle release config still uses a development signing key.
