@@ -1323,10 +1323,12 @@ class FacilitiesPage extends StatelessWidget {
 
   Future<void> _addFacility(BuildContext context) async {
     final name = TextEditingController(),
-        people = TextEditingController(text: '100'),
-        floors = TextEditingController(text: '3'),
-        toilets = TextEditingController(text: '8'),
-        cap = TextEditingController(text: '500');
+        people = TextEditingController(),
+        floors = TextEditingController(),
+        toilets = TextEditingController(),
+        cap = TextEditingController(),
+        threshold = TextEditingController(),
+        essential = TextEditingController();
     String type = 'hostel';
     await showDialog<void>(
         context: context,
@@ -1366,7 +1368,13 @@ class FacilitiesPage extends StatelessWidget {
                           controller: people,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
-                              labelText: 'Number of residents'))
+                              labelText: 'Number of residents')),
+                      const SizedBox(height: 10),
+                      TextField(
+                          controller: essential,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                              labelText: 'Essential litres per resident / day'))
                     ],
                     if (type == 'canteen') ...[
                       const SizedBox(height: 10),
@@ -1376,6 +1384,13 @@ class FacilitiesPage extends StatelessWidget {
                           decoration: const InputDecoration(
                               labelText: 'Daily water cap (litres)'))
                     ],
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: threshold,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Low-water threshold (litres)'),
+                    ),
                   ])),
                   actions: [
                     TextButton(
@@ -1386,14 +1401,20 @@ class FacilitiesPage extends StatelessWidget {
                           final p = int.tryParse(people.text),
                               fl = int.tryParse(floors.text),
                               r = int.tryParse(toilets.text),
-                              c = double.tryParse(cap.text);
+                              c = double.tryParse(cap.text),
+                              low = double.tryParse(threshold.text),
+                              rate = double.tryParse(essential.text);
                           if (name.text.trim().isEmpty ||
                               fl == null ||
                               fl < 1 ||
                               r == null ||
                               r < 0 ||
-                              (type == 'hostel' && (p == null || p < 1)) ||
-                              (type == 'canteen' && (c == null || c <= 0))) {
+                              (type == 'hostel' && (p == null || p < 1 ||
+                                  rate == null || !rate.isFinite ||
+                                  rate <= 0 || rate > 1000)) ||
+                              (type == 'canteen' &&
+                                  (c == null || !c.isFinite || c <= 0)) ||
+                              low == null || !low.isFinite || low < 0) {
                             ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                     content:
@@ -1409,7 +1430,10 @@ class FacilitiesPage extends StatelessWidget {
                                   floors: fl,
                                   restrooms: r,
                                   dailyCapLitres:
-                                      type == 'canteen' ? c ?? 0 : 0),
+                                      type == 'canteen' ? c ?? 0 : 0,
+                                  lowWaterThresholdLitres: low,
+                                  essentialLitresPerResident:
+                                      type == 'hostel' ? rate ?? 1 : 1),
                               success: 'Facility created');
                           if (context.mounted) Navigator.pop(context);
                         },
@@ -1421,6 +1445,8 @@ class FacilitiesPage extends StatelessWidget {
     floors.dispose();
     toilets.dispose();
     cap.dispose();
+    threshold.dispose();
+    essential.dispose();
   }
 }
 
@@ -1562,10 +1588,10 @@ class TanksPage extends StatelessWidget {
       return;
     }
     final name = TextEditingController(),
-        length = TextEditingController(text: '100'),
-        width = TextEditingController(text: '100'),
-        height = TextEditingController(text: '100'),
-        diameter = TextEditingController(text: '100');
+        length = TextEditingController(),
+        width = TextEditingController(),
+        height = TextEditingController(),
+        diameter = TextEditingController();
     String shape = 'rect', facilityId = '${store.facilities.first['id']}';
     await showDialog<void>(
         context: context,
@@ -1781,8 +1807,8 @@ class RequestsPage extends StatelessWidget {
       return;
     }
     String facilityId = '${choices.first['id']}', activity = 'Laundry';
-    final people = TextEditingController(text: '1'),
-        rate = TextEditingController(text: '35'),
+    final people = TextEditingController(),
+        rate = TextEditingController(),
         notes = TextEditingController();
     await showDialog<void>(
         context: context,
@@ -1812,11 +1838,8 @@ class RequestsPage extends StatelessWidget {
                           for (final a in activityNames)
                             DropdownMenuItem(value: a, child: Text(a))
                         ],
-                        onChanged: (v) => setDialog(() {
-                              activity = v ?? activity;
-                              rate.text =
-                                  '${suggestedActivityLitres[activity] ?? 5}';
-                            })),
+                        onChanged: (v) =>
+                            setDialog(() => activity = v ?? activity)),
                     const SizedBox(height: 10),
                     TextField(
                         controller: people,
@@ -1847,7 +1870,7 @@ class RequestsPage extends StatelessWidget {
                                 color: sea))),
                     const SizedBox(height: 6),
                     const Text(
-                        'Rate is an editable planning assumption, not a measured water quantity. Example: 4 people × 5 L = 20 L.',
+                        'Enter your actual planned demand; no quantity is filled in automatically.',
                         style: TextStyle(fontSize: 11, color: Colors.black54)),
                   ])),
                   actions: [
@@ -2037,8 +2060,8 @@ class SOSPage extends StatelessWidget {
       return;
     }
     String facilityId = '${locations.first['id']}';
-    final floor = TextEditingController(text: '1'),
-        restroom = TextEditingController(text: 'Restroom 1'),
+    final floor = TextEditingController(),
+        restroom = TextEditingController(),
         details = TextEditingController();
     await showDialog<void>(
         context: context,
