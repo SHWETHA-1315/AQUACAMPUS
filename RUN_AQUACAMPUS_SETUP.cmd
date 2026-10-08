@@ -1,47 +1,44 @@
 @echo off
 setlocal
-title AQUACAMPUS Firebase Setup + Android APK
+title AQUACAMPUS Backend + Android
 cd /d "%~dp0"
-echo ================================================================
-echo        AQUACAMPUS - REAL FIREBASE ANDROID SETUP
-echo ================================================================
+echo ============================================================
+echo       AQUACAMPUS - REAL FIREBASE BACKEND DEPLOYMENT
+echo ============================================================
 echo Firebase project: aquacampus-ed284
 echo Android package: com.example.aquacampus
+echo Authentication: Email/Password
+echo Firestore rules: Role-scoped, no demo accounts
 echo.
-echo This setup requires the Firebase project owner's Google sign-in.
-echo No demo users or fabricated campus measurements will be created.
-echo.
+echo A browser-based owner Google sign-in is required.
+echo Review rules before accepting their deployment.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0START_AQUACAMPUS_FIREBASE.ps1"
 if errorlevel 1 (
-  echo.
-  echo Backend setup stopped. Please review the error above.
+  echo Backend not deployed. Review the error before retrying.
   pause
   exit /b 1
 )
 echo.
-echo Firebase Auth Email/Password must be enabled in the Firebase Console.
-echo Open: https://console.firebase.google.com/project/aquacampus-ed284/authentication/providers
+echo Firebase backend deployment command finished.
+echo Do not publish until role testing and a verified first Admin are complete.
 echo.
-choice /C YN /M "Did you enable Email/Password Authentication in Firebase?"
-if errorlevel 2 (
-  echo Enable the provider before trying the Android app.
-  pause
-  exit /b 1
-)
-echo.
-echo Building the real Android APK for Firebase project aquacampus-ed284...
+echo Optional: build the Android APK now.
+choice /C YN /M "Build Android APK"
+if errorlevel 2 goto DONE
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0build_apk.ps1" -LiveFirebase
 if errorlevel 1 (
-  echo.
-  echo APK build failed. Check Flutter and Android SDK installation.
+  echo Android build failed. Backend deployment was not undone.
   pause
   exit /b 1
 )
+echo Generated APK: release\AQUACAMPUS-FIREBASE-LIVE.apk
+:DONE
 echo.
-echo ================================================================
-echo SUCCESS: release\AQUACAMPUS-FIREBASE-LIVE.apk
-echo ================================================================
-echo IMPORTANT: The first admin must still be approved using Firebase Console.
-echo Other users need admin assignment before accessing real campus data.
+echo First Admin steps:
+echo 1. Register the intended account via installed AQUACAMPUS app.
+echo 2. On your own PC, run PowerShell:
+echo    .\BOOTSTRAP_ADMIN.ps1 -Email your-real-email@example.com
+echo 3. Reopen app. Admin can assign real people, facilities and rooms.
+echo 4. Verify two-phone realtime updates and Firestore security rules.
 pause
 endlocal
