@@ -496,14 +496,18 @@ class _AppShellState extends State<AppShell> {
                           const TextStyle(color: Colors.black54, fontSize: 14)))
             ]),
             actions: [
-              if (!s.cloud)
-                Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Center(
-                        child: Badge(
-                            label: const Text('LOCAL'),
-                            backgroundColor: const Color(0xFF98712B),
-                            child: const Icon(Icons.offline_bolt_outlined)))),
+              Tooltip(
+                message: s.backendConnected
+                    ? 'Firebase synchronized' : 'Waiting for Firebase',
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Icon(
+                    s.backendConnected ? Icons.cloud_done_rounded
+                        : Icons.cloud_sync_outlined,
+                    color: s.backendConnected ? sea : amber,
+                  ),
+                ),
+              ),
               IconButton(
                   tooltip: 'Sign out / switch role',
                   onPressed: s.logout,
@@ -528,7 +532,7 @@ class _AppShellState extends State<AppShell> {
                             fontSize: 18)),
                     const SizedBox(height: 4),
                     Text(
-                        '${_nice(s.role)} access · ${s.cloud ? 'LIVE' : 'LOCAL'}',
+                        '${_nice(s.role)} · Verified campus access',
                         style: const TextStyle(
                             color: Color(0xFFD7F4FF), fontSize: 12)),
                     if (s.myFacilityId.isNotEmpty)
@@ -578,7 +582,9 @@ class _AppShellState extends State<AppShell> {
                   Expanded(child: body),
                 ])),
         bottomNavigationBar: NavigationBar(
-            height: 66,
+            height: 72,
+            backgroundColor: Colors.white,
+            indicatorColor: const Color(0xFFD7F0FF),
             selectedIndex: current == 'Overview'
                 ? 0
                 : current == 'Requests'
@@ -727,7 +733,7 @@ class StatusPill extends StatelessWidget {
             color: isBad
                 ? const Color(0xFFFFE9E3)
                 : isGood
-                    ? const Color(0xFFDCF5E8)
+                    ? const Color(0xFFDFF5FF)
                     : const Color(0xFFFFF2D6),
             borderRadius: BorderRadius.circular(30)),
         child: Text(_nice(status),
@@ -798,11 +804,19 @@ class OverviewPage extends StatelessWidget {
     return ScreenBody(
         title: 'Hello, ${s.name.split(' ').first} 👋',
         subtitle:
-            '${_nice(s.role)} workspace  •  ${s.cloud ? 'Live Firestore sync' : 'Offline local workspace'}',
+            '${_nice(s.role)} · Campus water management',
         children: [
-          if (!s.cloud)
+          OceanHero(
+            title: 'Hello, ${s.name.split(' ').first}',
+            subtitle: 'One campus. All your water operations.',
+            compact: true,
+          ),
+          const SizedBox(height: 14),
+          if (!s.backendConnected)
             const InfoBanner(
-                'DEMO MODE: Changes are real on this device and saved locally, but do not sync with other phones. Configure Firebase for live campus use.'),
+              'Waiting for a fresh campus database connection. Edits are disabled until Firebase responds.',
+              warning: true,
+            ),
           if (s.isStaff && activeSOS > 0)
             InfoBanner(
                 '$activeSOS urgent SOS report(s) need water worker/admin attention.',
@@ -870,8 +884,12 @@ class OverviewPage extends StatelessWidget {
                                 const TextStyle(fontWeight: FontWeight.w800))),
                     StatusPill('${f['type']}')
                   ]),
-                  _labelValue('Water currently estimated',
-                      litres(s.availableFor('${f['id']}'))),
+                  _labelValue('Water from staff measurements',
+                    s.tanks.any((t) =>
+                      t['facilityId'] == f['id'] &&
+                      '${t['lastMeasuredAt'] ?? ''}'.isNotEmpty)
+                    ? litres(s.availableFor('${f['id']}'))
+                    : 'Not measured yet'),
                   if (f['type'] == 'canteen')
                     _labelValue('Today supplied / allowed',
                         '${litres(s.dailyUsed('${f['id']}'))} / ${litres(nval(f['dailyCapLitres']))}'),
@@ -1065,8 +1083,8 @@ class PlannerPage extends StatelessWidget {
               minHeight: 9,
               color: shortage > 0
                   ? const Color(0xFFDA9845)
-                  : const Color(0xFF0A9C88),
-              backgroundColor: const Color(0xFFE4F1EB))),
+                  : const Color(0xFF19A9D9),
+              backgroundColor: const Color(0xFFD9EDFB))),
       if (shortage > 0 && fullVisibility)
         Padding(
             padding: const EdgeInsets.only(top: 10),
@@ -2211,9 +2229,7 @@ class MembersPage extends StatelessWidget {
           children: [
             const InfoBanner(
                 'SECURITY: New Firebase sign-ups are pending Students. Only Admin may approve or promote them to Worker, Warden, Teacher or Admin.'),
-            if (!store.cloud)
-              const InfoBanner(
-                  'Offline demo role selection happens on the entry screen. Real member approvals require Firebase live mode.'),
+member demo
             if (store.people.isEmpty)
               _empty(
                   'No registered cloud members. New users will appear here after Firebase is configured and an admin account is bootstrapped.'),
