@@ -33,7 +33,7 @@ if ($matches.Count -ne 1) {
 $app = $matches[0]
 $appId = [string]$app.client_info.mobilesdk_app_id
 $senderId = [string]$json.project_info.project_number
-$apiKey = [string]@($app.api_key)[0].current_key
+$apiKey = [string]$app.api_key[0].current_key
 
 if ([string]::IsNullOrWhiteSpace($apiKey) -or
     [string]::IsNullOrWhiteSpace($senderId) -or
