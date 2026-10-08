@@ -2,7 +2,7 @@
 
 AQUACAMPUS is a Flutter **Android mobile application** with five role-based portals: Admin, Water Worker, Hostel Warden, Student and Teacher.
 
-**Selected backend:** Firebase project [`aquacampus-ed284`](https://console.firebase.google.com/project/aquacampus-ed284/overview). **Android package:** `com.example.aquacampus`. The Firebase project has been selected in the code, but account-managed Authentication, Firestore creation and rules deployment must be confirmed before a live APK can be released.
+**Selected backend:** Firebase project [`aquacampus-ed284`](https://console.firebase.google.com/project/aquacampus-ed284/overview). **Android package:** `com.example.aquacampus`. The registered Android client configuration from Firebase has now been integrated into `lib/firebase_android_config.dart`. Account-managed Authentication, Firestore creation and rules deployment still need confirmation before live user workflows can operate.
 
 The mobile app uses Firebase Authentication and Cloud Firestore as the backend. It has no simulation mode: there is no shortcut for logging in as an admin, and all campus facilities, tank readings, requests, supply confirmations and SOS incidents must be entered by authorised users.
 
@@ -18,15 +18,15 @@ Changes are shared to authorised accounts using Firestore real-time listeners. T
 
 ## Deployment requirement
 
-The app **must** be connected to a real Firebase project. Until that configuration exists, the mobile UI shows a blocking connection-required screen rather than granting simulated access.
+The app **must** be connected to a real Firebase project. Firebase Android client settings are compiled into the app; when Firebase cannot initialize, the mobile UI blocks usage rather than granting simulated access.
 
-Set up the Firebase project, Email/Password Authentication, Firestore database, and deploy [Firestore security rules](firestore.rules). Register an Android application matching the package ID and supply the appropriate Firebase Android app configuration at build time. Bootstrap the first real admin in Firebase Console.
+Set up the Firebase project, Email/Password Authentication, Firestore database, and deploy [Firestore security rules](firestore.rules). The Firebase Android application was registered with the correct package name, and its public Firebase client settings are already included in source code. Bootstrap the first real admin in Firebase Console.
 
 See [Firebase live setup](docs/FIREBASE_LIVE_SETUP.md).
 
-**Simplified build:** Download the Firebase **Android** app's `google-services.json` from the project settings into `android/app/google-services.json`, then run `./SETUP_FIREBASE.ps1 -DeployRules` (after verifying database/rules) and `./build_apk.ps1 -LiveFirebase`. The build script extracts Android Firebase config and checks the project/package automatically.
+**Simplified build:** GitHub Actions runs `flutter build apk --release` with the registered Firebase Android client settings. Locally, after `git pull`, run `./build_apk.ps1 -LiveFirebase`. You no longer need to upload or copy `google-services.json` to compile. A successfully compiled APK is **not** proof that Firestore rules have been deployed or sign-in enabled.
 
-**GitHub Actions APK:** Build with an authenticated Android Firebase configuration. Never distribute a locally simulated release as the production campus app.
+**GitHub Actions APK:** Builds a genuine Android APK that initializes the existing Firebase project. This is a development-signed APK; set up secure release signing before distributing as a production app. No dummy dataset is shipped.
 
 ## Visual design
 
@@ -41,4 +41,4 @@ flutter pub get
 flutter test
 ```
 
-Supply Firebase settings as outlined in the setup guide before producing and installing an Android APK. Do not commit passwords, service-account private keys or security tokens.
+Project ID, app ID, sender ID, and Firebase client API key are **public Android client identifiers**, not privileged service-account credentials; they are shipped in the APK. Firebase Auth, Firestore Rules, Google API-key restrictions and optionally App Check must protect the backend. Do not commit passwords, service-account private keys or security tokens.
