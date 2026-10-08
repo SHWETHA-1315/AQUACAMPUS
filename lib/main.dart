@@ -5,20 +5,14 @@ import 'campus_store.dart';
 import 'water_budget.dart';
 import 'water_math.dart';
 
-const sea = Color(0xFF096C64);
-const ink = Color(0xFF153E3A);
-const pale = Color(0xFFF2F7F5);
-const amber = Color(0xFFFFA72A);
+// AQUACAMPUS · Sky, ocean and white design language
+const sea = Color(0xFF0675C9);
+const ink = Color(0xFF103B63);
+const pale = Color(0xFFF0F9FF);
+const amber = Color(0xFFF5A524);
+const brightSky = Color(0xFF53CFFF);
+const oceanBlue = Color(0xFF074E99);
 final formatter = NumberFormat('#,##0.#');
-// Suggested values only, adjustable per activity; NOT measured consumption.
-const suggestedActivityLitres = <String, double>{
-  'Bathing': 25,
-  'Laundry': 35,
-  'Room cleaning': 15,
-  'Cooking': 6,
-  'Utensil washing': 10,
-  'Other': 5,
-};
 String litres(num value) => '${formatter.format(value)} L';
 String briefTime(dynamic value) {
   final d = DateTime.tryParse('$value');
@@ -57,10 +51,10 @@ class AquaApp extends StatelessWidget {
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(13),
-                        borderSide: const BorderSide(color: Color(0xFFD7E7E1))),
+                        borderSide: const BorderSide(color: Color(0xFFC9E6FA))),
                     enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(13),
-                        borderSide: const BorderSide(color: Color(0xFFD7E7E1))),
+                        borderSide: const BorderSide(color: Color(0xFFC9E6FA))),
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 13)),
                 elevatedButtonTheme: ElevatedButtonThemeData(
@@ -75,15 +69,16 @@ class AquaApp extends StatelessWidget {
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(17),
-                        side: const BorderSide(color: Color(0xFFE0EBE7))))),
+                        side: const BorderSide(color: Color(0xFFCEE8F8))))),
             home: store.loading
-                ? const Scaffold(
-                    body: Center(child: CircularProgressIndicator()))
-                : !store.signedIn
-                    ? EntryPage(store: store)
-                    : !store.approved
-                        ? ApprovalPage(store: store)
-                        : AppShell(store: store),
+                ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+                : !store.cloud
+                    ? BackendRequiredPage(store: store)
+                    : !store.signedIn
+                        ? EntryPage(store: store)
+                        : !store.approved
+                            ? ApprovalPage(store: store)
+                            : AppShell(store: store),
           ));
 }
 
@@ -94,196 +89,306 @@ class EntryPage extends StatefulWidget {
   State<EntryPage> createState() => _EntryPageState();
 }
 
+/// Waves and ocean light are drawn in Flutter. No external images or
+/// third-party websites are used by the mobile application.
+class OceanHero extends StatelessWidget {
+  const OceanHero({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    this.compact = false,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => Container(
+      height: compact ? 158 : 200,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(25),
+        gradient: const LinearGradient(
+          colors: [brightSky, sea, oceanBlue],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: const [
+          BoxShadow(color: Color(0x2459A8D7), blurRadius: 24, offset: Offset(0, 12))
+        ],
+      ),
+      child: ClipRRect(
+          borderRadius: BorderRadius.circular(25),
+          child: CustomPaint(
+              painter: OceanWavePainter(),
+              child: Padding(
+                  padding: EdgeInsets.all(compact ? 21 : 27),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 46, height: 46,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: Colors.white54),
+                        ),
+                        child: const Icon(Icons.water_drop_rounded, size: 30, color: Colors.white),
+                      ),
+                      SizedBox(height: compact ? 10 : 15),
+                      Text(title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: compact ? 24 : 31,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: -0.8,
+                        )),
+                      const SizedBox(height: 4),
+                      Text(subtitle, maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Color(0xFFE3F7FF), fontSize: 12)),
+                    ],
+                  )))));
+
+}
+
+class OceanWavePainter extends CustomPainter {
+  const OceanWavePainter();
+  @override
+  void paint(Canvas canvas, Size size) {
+    final farWave = Path()
+      ..moveTo(0, size.height * .73)
+      ..quadraticBezierTo(size.width * .28, size.height * .58,
+          size.width * .54, size.height * .75)
+      ..quadraticBezierTo(size.width * .83, size.height * .92,
+          size.width, size.height * .63)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(farWave, Paint()..color = Colors.white.withValues(alpha: .12));
+    final nearWave = Path()
+      ..moveTo(0, size.height * .87)
+      ..quadraticBezierTo(size.width * .30, size.height * .72,
+          size.width * .62, size.height * .91)
+      ..quadraticBezierTo(size.width * .83, size.height * 1.0,
+          size.width, size.height * .83)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(nearWave, Paint()..color = Colors.white.withValues(alpha: .20));
+    final ripple = Paint()
+      ..color = Colors.white.withValues(alpha: .16)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas.drawArc(Rect.fromLTWH(size.width * .70, size.height * .08,
+      size.width * .44, size.width * .44), 0.2, 3.3, false, ripple);
+  }
+  @override
+  bool shouldRepaint(covariant OceanWavePainter oldDelegate) => false;
+}
+
+class BackendRequiredPage extends StatelessWidget {
+  const BackendRequiredPage({super.key, required this.store});
+  final CampusStore store;
+  @override
+  Widget build(BuildContext context) => Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 530),
+            child: ListView(shrinkWrap: true,
+              padding: const EdgeInsets.all(22),
+              children: [
+                const OceanHero(
+                  title: 'AQUACAMPUS',
+                  subtitle: 'One campus. One secure water network.',
+                ),
+                const SizedBox(height: 22),
+                const Surface(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.cloud_off_rounded, color: sea, size: 38),
+                      SizedBox(height: 10),
+                      Text('Campus connection required',
+                        style: TextStyle(fontWeight: FontWeight.w900,
+                            fontSize: 19, color: ink)),
+                      SizedBox(height: 8),
+                      Text(
+                        'AQUACAMPUS uses real Firebase accounts and live water records only. '
+                        'The administrator must provide an Android app built for the campus Firebase project. '
+                        'No example readings, simulated logins or local-mode access are available.',
+                        style: TextStyle(height: 1.6, color: ink)),
+                    ],
+                  ),
+                ),
+                if (store.message != null) ...[
+                  const SizedBox(height: 8),
+                  InfoBanner(store.message!, warning: true),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ));
+}
+
 class _EntryPageState extends State<EntryPage> {
-  final name = TextEditingController(text: 'Campus Member');
+  final name = TextEditingController();
   final email = TextEditingController();
   final password = TextEditingController();
-  final room = TextEditingController(text: '101');
-  String role = 'student', facilityId = 'hostel-a';
-  bool create = false, busy = false;
+  bool create = false;
+  bool busy = false;
+  bool showPassword = false;
+
   @override
   void dispose() {
     name.dispose();
     email.dispose();
     password.dispose();
-    room.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.store;
+    final store = widget.store;
     return Scaffold(
-        body: SafeArea(
-            child: Center(
-                child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(22),
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const SizedBox(height: 17),
-                              const Center(
-                                  child: Icon(Icons.water_drop_rounded,
-                                      color: sea, size: 57)),
-                              const SizedBox(height: 7),
-                              const Center(
-                                  child: Text('AQUACAMPUS',
-                                      style: TextStyle(
-                                          fontSize: 30,
-                                          fontWeight: FontWeight.w900,
-                                          color: ink,
-                                          letterSpacing: -1))),
-                              const SizedBox(height: 6),
-                              const Center(
-                                  child: Text('Smart Campus Water Network',
-                                      style: TextStyle(color: Colors.black54))),
-                              const SizedBox(height: 20),
-                              Container(
-                                  padding: const EdgeInsets.all(15),
-                                  decoration: BoxDecoration(
-                                      color: const Color(0xFFE5F6EF),
-                                      borderRadius: BorderRadius.circular(13)),
-                                  child: Text(
-                                      s.cloud
-                                          ? 'LIVE CLOUD MODE · Verified role-based access'
-                                          : 'LOCAL DEMO MODE · Data saved on this device only',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          color: sea,
-                                          fontSize: 12),
-                                      textAlign: TextAlign.center)),
-                              const SizedBox(height: 23),
-                              if (!s.cloud) ...[
-                                const Text('Select access portal',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 16)),
-                                const SizedBox(height: 10),
-                                Wrap(spacing: 8, runSpacing: 8, children: [
-                                  for (final r in roleNames)
-                                    ChoiceChip(
-                                        label: Text(_nice(r)),
-                                        selected: role == r,
-                                        onSelected: (_) =>
-                                            setState(() => role = r)),
-                                ]),
-                                const SizedBox(height: 17),
-                                TextField(
-                                    controller: name,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Your display name')),
-                                const SizedBox(height: 12),
-                                if (role == 'student' || role == 'warden') ...[
-                                  DropdownButtonFormField<String>(
-                                      initialValue: facilityId,
-                                      decoration: const InputDecoration(
-                                          labelText: 'Hostel'),
-                                      items: s.facilities
-                                          .where((x) => x['type'] == 'hostel')
-                                          .map((f) => DropdownMenuItem(
-                                              value: '${f['id']}',
-                                              child: Text('${f['name']}')))
-                                          .toList(),
-                                      onChanged: (v) => setState(
-                                          () => facilityId = v ?? facilityId)),
-                                  const SizedBox(height: 12),
-                                  if (role == 'student')
-                                    TextField(
-                                        controller: room,
-                                        decoration: const InputDecoration(
-                                            labelText: 'Room number')),
-                                ],
-                                const SizedBox(height: 20),
-                                ElevatedButton.icon(
-                                    icon: const Icon(Icons.login),
-                                    label: const Text('Enter Campus Network'),
-                                    onPressed: () => s.loginOffline(
-                                        role, name.text,
-                                        facilityId: facilityId,
-                                        room: room.text)),
-                                const SizedBox(height: 14),
-                                const Text(
-                                    'Switch between roles to test the full workflow. In production, roles are assigned by admin; students cannot promote themselves.',
-                                    style: TextStyle(
-                                        color: Colors.black54,
-                                        fontSize: 12,
-                                        height: 1.5)),
-                              ] else ...[
-                                Text(
-                                    create
-                                        ? 'Create your campus account'
-                                        : 'Sign in to your campus account',
-                                    style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w800)),
-                                const SizedBox(height: 15),
-                                if (create) ...[
-                                  TextField(
-                                      controller: name,
-                                      decoration: const InputDecoration(
-                                          labelText: 'Full name')),
-                                  const SizedBox(height: 12)
-                                ],
-                                TextField(
-                                    controller: email,
-                                    keyboardType: TextInputType.emailAddress,
-                                    autocorrect: false,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Email address')),
-                                const SizedBox(height: 12),
-                                TextField(
-                                    controller: password,
-                                    obscureText: true,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Password (6+ characters)')),
-                                const SizedBox(height: 15),
-                                ElevatedButton(
-                                    onPressed: busy
-                                        ? null
-                                        : () async {
-                                            setState(() => busy = true);
-                                            try {
-                                              await s.emailLogin(
-                                                  email.text, password.text,
-                                                  create: create,
-                                                  name: name.text);
-                                              if (!context.mounted) return;
-                                              ScaffoldMessenger.of(context)
-                                                  .showSnackBar(SnackBar(
-                                                      content: Text(create
-                                                          ? 'Account created. Admin approval required.'
-                                                          : 'Signed in')));
-                                            } catch (e) {
-                                              if (!context.mounted) return;
-                                              ScaffoldMessenger.of(context)
-                                                  .showSnackBar(SnackBar(
-                                                      content: Text('$e')));
-                                            } finally {
-                                              if (mounted) {
-                                                setState(() => busy = false);
-                                              }
-                                            }
-                                          },
-                                    child: Text(busy
-                                        ? 'Please wait...'
-                                        : create
-                                            ? 'Register (Student — pending approval)'
-                                            : 'Sign in')),
-                                TextButton(
-                                    onPressed: () =>
-                                        setState(() => create = !create),
-                                    child: Text(create
-                                        ? 'Already registered? Sign in'
-                                        : 'New member? Register')),
-                                const Text(
-                                    'For security, new users are pending Students. An Admin must approve their role, hostel and room.',
-                                    style: TextStyle(
-                                        fontSize: 12, color: Colors.black54)),
-                              ],
-                              const SizedBox(height: 25),
-                            ]))))));
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFEAF8FF), Colors.white, Color(0xFFE6F6FF)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const OceanHero(
+                      title: 'AQUACAMPUS',
+                      subtitle: 'Your campus water, connected in real time.',
+                    ),
+                    const SizedBox(height: 22),
+                    Surface(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(children: [
+                          const Icon(Icons.verified_user_outlined, color: sea),
+                          const SizedBox(width: 9),
+                          Expanded(child: Text(
+                            create ? 'Create your campus account' : 'Welcome back',
+                            style: const TextStyle(fontWeight: FontWeight.w900,
+                                fontSize: 21, color: ink),
+                          )),
+                        ]),
+                        const SizedBox(height: 7),
+                        const Text('Secure sign-in · Firebase Authentication',
+                          style: TextStyle(fontSize: 12, color: Colors.black54)),
+                        const SizedBox(height: 18),
+                        if (create) ...[
+                          TextField(
+                            controller: name,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: const InputDecoration(
+                              prefixIcon: Icon(Icons.person_outline),
+                              labelText: 'Your full name',
+                            ),
+                          ),
+                          const SizedBox(height: 13),
+                        ],
+                        TextField(
+                          controller: email,
+                          keyboardType: TextInputType.emailAddress,
+                          autocorrect: false,
+                          decoration: const InputDecoration(
+                            prefixIcon: Icon(Icons.alternate_email),
+                            labelText: 'College email address',
+                          ),
+                        ),
+                        const SizedBox(height: 13),
+                        TextField(
+                          controller: password,
+                          obscureText: !showPassword,
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            labelText: 'Password',
+                            suffixIcon: IconButton(
+                              icon: Icon(showPassword
+                                ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                              onPressed: () =>
+                                setState(() => showPassword = !showPassword),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        FilledButton.icon(
+                          onPressed: busy ? null : () async {
+                            if (!email.text.contains('@') ||
+                                password.text.length < 6 ||
+                                (create && name.text.trim().length < 2)) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text(
+                                  'Enter a valid email, password (6+ characters), and full name.')),
+                              );
+                              return;
+                            }
+                            setState(() => busy = true);
+                            try {
+                              await store.emailLogin(email.text.trim(), password.text,
+                                create: create, name: name.text.trim());
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: Text(create
+                                  ? 'Account created. Await admin verification.'
+                                  : 'Signed in to campus.'),
+                              ));
+                            } catch (error) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('$error')),
+                              );
+                            } finally {
+                              if (mounted) setState(() => busy = false);
+                            }
+                          },
+                          icon: Icon(create ? Icons.person_add_alt_1 : Icons.login),
+                          label: Text(busy ? 'Connecting…'
+                              : create ? 'Request campus account' : 'Sign in'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: busy ? null : () => setState(() => create = !create),
+                          child: Text(create
+                            ? 'Already registered? Sign in'
+                            : 'New to AQUACAMPUS? Register'),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Admin approves every account and assigns an official role, '
+                          'hostel and room. Only verified inputs appear in the water network.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 11, color: Colors.black54,
+                              height: 1.6),
+                        ),
+                      ],
+                    )),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -409,7 +514,7 @@ class _AppShellState extends State<AppShell> {
                 child: Column(children: [
           Container(
               width: double.infinity,
-              color: const Color(0xFF104A44),
+              color: const Color(0xFF09579F),
               padding: const EdgeInsets.all(23),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,11 +530,11 @@ class _AppShellState extends State<AppShell> {
                     Text(
                         '${_nice(s.role)} access · ${s.cloud ? 'LIVE' : 'LOCAL'}',
                         style: const TextStyle(
-                            color: Color(0xFFC6E7DF), fontSize: 12)),
+                            color: Color(0xFFD7F4FF), fontSize: 12)),
                     if (s.myFacilityId.isNotEmpty)
                       Text(s.facilityName(s.myFacilityId),
                           style: const TextStyle(
-                              color: Color(0xFFC6E7DF), fontSize: 12)),
+                              color: Color(0xFFD7F4FF), fontSize: 12)),
                   ])),
           Expanded(
               child: ListView(children: [
@@ -593,7 +698,7 @@ class InfoBanner extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 13),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-          color: warning ? const Color(0xFFFFF3D8) : const Color(0xFFE3F5EF),
+          color: warning ? const Color(0xFFFFF3D8) : const Color(0xFFE5F5FF),
           borderRadius: BorderRadius.circular(13)),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Icon(warning ? Icons.warning_amber : Icons.info_outline,
