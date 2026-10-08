@@ -338,6 +338,7 @@ class _AppShellState extends State<AppShell> {
     final pages = [
       const NavItem('Overview', Icons.dashboard_rounded),
       const NavItem('Planner', Icons.event_note_rounded),
+      if (!s.isTeacher) const NavItem('Rooms', Icons.meeting_room_outlined),
       const NavItem('Facilities', Icons.apartment_rounded),
       const NavItem('Tanks', Icons.water_rounded),
       const NavItem('Requests', Icons.playlist_add_check_circle_rounded),
@@ -350,6 +351,9 @@ class _AppShellState extends State<AppShell> {
     switch (current) {
       case 'Planner':
         body = PlannerPage(store: s);
+        break;
+      case 'Rooms':
+        body = RoomDemandPage(store: s);
         break;
       case 'Facilities':
         body = FacilitiesPage(store: s);
@@ -973,6 +977,71 @@ class PlannerPage extends StatelessWidget {
                 'Other residents’ unsubmitted/approved demand is not shown in this personal view.',
                 style: TextStyle(fontSize: 11, color: Colors.black54))),
     ]));
+  }
+}
+
+/// Room-level, today-only summaries. Students only have access to their own
+/// request records; wardens and staff see the records permitted by Firestore.
+class RoomDemandPage extends StatelessWidget {
+  const RoomDemandPage({super.key, required this.store});
+  final CampusStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = dateKey();
+    final groups = <String, List<Map<String, dynamic>>>{};
+    for (final request in store.visibleRequests) {
+      final facilityId = '${request['facilityId'] ?? ''}';
+      if (store.facility(facilityId)?['type'] != 'hostel') continue;
+      final time = DateTime.tryParse('${request['createdAt']}');
+      if (time == null || dateKey(time.toLocal()) != today) continue;
+      final room = '${request['room'] ?? ''}'.trim();
+      final key = '$facilityId::${room.isEmpty ? 'Unassigned room' : room}';
+      groups.putIfAbsent(key, () => <Map<String, dynamic>>[]).add(request);
+    }
+    final entries = groups.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return ScreenBody(
+      title: 'Room water demand',
+      subtitle: 'Today · hostel room-wise submitted activity plans',
+      children: [
+        InfoBanner(store.isStudent
+            ? 'You can see only water requests submitted by your account, not another student’s private activity history.'
+            : 'Room totals reflect requests received so far, not automatic water meters or complete essential needs.'),
+        if (entries.isEmpty)
+          _empty('No hostel room activity requests received today. Students can add plans from the Requests tab.'),
+        for (final entry in entries)
+          Surface(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${store.facilityName(entry.key.split('::').first)} · Room ${entry.key.split('::').last}',
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+              const SizedBox(height: 7),
+              _labelValue('Requests', '${entry.value.length}'),
+              _labelValue('Submitted demand',
+                litres(entry.value.fold<double>(
+                  0, (total, r) => total + nval(r['quantityLitres']).toDouble()))),
+              _labelValue('Worker approved',
+                litres(entry.value.where((r) =>
+                  r['status'] == 'approved' || r['status'] == 'fulfilled')
+                  .fold<double>(0, (total, r) =>
+                  total + nval(r['approvedLitres']).toDouble()))),
+              _labelValue('Confirmed physically supplied',
+                litres(entry.value.where((r) => r['status'] == 'fulfilled')
+                  .fold<double>(0, (total, r) =>
+                  total + nval(r['approvedLitres']).toDouble()))),
+              _labelValue('Waiting for worker',
+                '${entry.value.where((r) => r['status'] == 'pending').length}'),
+              const SizedBox(height: 7),
+              Text(
+                entry.value.map((r) =>
+                  '${r['activity']}: ${litres(nval(r['quantityLitres']))}').join('  ·  '),
+                style: const TextStyle(fontSize: 12, color: Colors.black54)),
+            ],
+          )),
+      ],
+    );
   }
 }
 
