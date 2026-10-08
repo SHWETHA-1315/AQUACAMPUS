@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'campus_store.dart';
+import 'water_budget.dart';
 import 'water_math.dart';
 
 const sea = Color(0xFF096C64);
@@ -768,6 +769,18 @@ class OverviewPage extends StatelessWidget {
                   if (f['type'] == 'hostel')
                     _labelValue('Residents (configured)', '${f['occupants']}'),
                 ])),
+          const SectionTitle('Automatic in-app low-water warnings'),
+          for (final f in myFacilities)
+            if (s.tanks.any((t) =>
+                    t['facilityId'] == f['id'] &&
+                    '${t['lastMeasuredAt'] ?? ''}'.isNotEmpty) &&
+                s.availableFor('${f['id']}') <= s.lowWaterThreshold(f))
+              InfoBanner(
+                '${f['name']}: about ${litres(s.availableFor('${f['id']}'))} remaining, below the configured ${litres(s.lowWaterThreshold(f))} threshold. '
+                '${f['type'] == 'hostel' ? 'Indicative per-resident share after 15% reserve: ${litres(WaterMath.perPersonShare(s.availableFor('${f['id']}'), nval(f['occupants']).toInt()))}. ' : ''}'
+                'Worker must verify the dipstick reading; this is not an automatic tank sensor.',
+                warning: true,
+              ),
           const SectionTitle('Announcements'),
           if (notice.isEmpty) _empty('No announcements yet'),
           for (final n in notice.take(3))
@@ -796,8 +809,6 @@ class OverviewPage extends StatelessWidget {
 class PlannerPage extends StatelessWidget {
   const PlannerPage({super.key, required this.store});
   final CampusStore store;
-  static const double essentialLitresPerHostelResident =
-      30; // example planning baseline; admin should adapt to campus needs
 
   @override
   Widget build(BuildContext context) {
@@ -826,7 +837,7 @@ class PlannerPage extends StatelessWidget {
             tooltip: 'Add planned activity'),
         children: [
           InfoBanner(fullVisibility
-              ? 'Activity demand below is from submitted requests only. Hostel essential use assumes 30 L per resident per day as an example baseline; enter a locally validated rate before relying on it.'
+              ? 'Activity demand is based on submitted requests only. Admin can configure the essential litres per resident for each hostel. No automatic metering.'
               : 'This is your own submitted activity demand, NOT every resident’s usage. Essential drinking, bathing, sanitation and accessibility must never be blocked by an app estimate.'),
           LayoutBuilder(builder: (ctx, box) {
             final w = (box.maxWidth - 10) / 2;
@@ -904,14 +915,18 @@ class PlannerPage extends StatelessWidget {
         .fold<double>(
             0, (sum, r) => sum + nval(r['quantityLitres']).toDouble());
     final residents = f['type'] == 'hostel' ? nval(f['occupants']).toInt() : 0;
-    final baseline = residents * essentialLitresPerHostelResident;
     final available = store.availableFor(id);
-    final predicted = baseline + activityDemand;
-    final shortage =
-        (predicted - available).clamp(0, double.infinity).toDouble();
-    final fill = predicted <= 0
-        ? 0.0
-        : (available / predicted).clamp(0.0, 1.0).toDouble();
+    final essentialRate = store.essentialRate(f);
+    final budget = WaterBudget.estimate(
+      storedLitres: available,
+      residents: residents,
+      essentialLitresPerResident: essentialRate,
+      requestedExtraLitres: activityDemand,
+    );
+    final baseline = budget.essential;
+    final predicted = budget.totalDemand;
+    final shortage = budget.totalShortfall;
+    final fill = budget.coveredFraction;
     return Surface(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
@@ -925,7 +940,7 @@ class PlannerPage extends StatelessWidget {
       _labelValue('Tank-based stored water estimate', litres(available)),
       if (residents > 0)
         _labelValue(
-            'Example essential baseline (30 L × $residents)', litres(baseline)),
+            'Essential plan (${formatter.format(essentialRate)} L × $residents)', litres(baseline)),
       _labelValue(
           fullVisibility
               ? 'Submitted activity demand'
@@ -947,7 +962,9 @@ class PlannerPage extends StatelessWidget {
         Padding(
             padding: const EdgeInsets.only(top: 10),
             child: InfoBanner(
-                'Possible shortage: ${litres(shortage)} against example forecast. Verify measured tank levels and protect essential water access.',
+                budget.essentialAtRisk
+                    ? 'URGENT: estimated essential water shortage ${litres(budget.essentialShortfall)}. Arrange supply and protect drinking/sanitation.'
+                    : 'Flexible activity shortage ${litres(shortage)}. Reschedule optional laundry/cleaning, subject to student needs. 15% reserve included.',
                 warning: true)),
       if (!fullVisibility && residents > 0)
         const Padding(
@@ -1175,6 +1192,17 @@ class TanksPage extends StatelessWidget {
                         t['shape'] == 'cylinder'
                             ? 'Upright cylinder'
                             : 'Rectangular'),
+                    if (store.isStaff &&
+                        store.readingHistory('${t['id']}').isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      const Text('Recent manual readings',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                      for (final reading in store.readingHistory('${t['id']}').take(3))
+                        _labelValue(
+                          briefTime(reading['measuredAt']),
+                          '${formatter.format(nval(reading['waterHeightCm']))} cm · ${litres(nval(reading['estimatedLitres']))}',
+                        ),
+                    ],
                     Text(
                         'Last measured: ${t['lastMeasuredAt'] == '' ? 'Not measured' : briefTime(t['lastMeasuredAt'])}',
                         style: const TextStyle(
