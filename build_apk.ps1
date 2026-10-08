@@ -3,6 +3,7 @@
 param([switch]$LiveFirebase)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
+if (-not $LiveFirebase) { throw 'This is a Firebase-only Android app. Pass -LiveFirebase with valid campus Firebase environment values; demo builds are disabled.' }
 
 function Run-Checked([string]$Executable, [string[]]$Arguments) {
     & $Executable @Arguments
@@ -32,7 +33,7 @@ Run-Checked 'flutter' $buildArgs
 $src = Join-Path $PSScriptRoot 'build\app\outputs\flutter-apk\app-release.apk'
 if (-not (Test-Path $src)) { throw "Flutter finished, but APK not found at $src" }
 New-Item -ItemType Directory -Force -Path '.\release' | Out-Null
-$target = Join-Path $PSScriptRoot 'release\AQUACAMPUS-v1.1-android.apk'
+$target = Join-Path $PSScriptRoot 'release\AQUACAMPUS-LIVE-android.apk'
 Copy-Item $src $target -Force
 Write-Host "APK GENERATED: $target" -ForegroundColor Green
-Write-Host 'Note: By default this is offline demo mode. Live multi-device deployment requires Firebase configuration and Firestore rules.' -ForegroundColor Yellow
+Write-Host 'Live Firebase build. Deploy security rules, approve members and test two phones before rollout.' -ForegroundColor Cyan
