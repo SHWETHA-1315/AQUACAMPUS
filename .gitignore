@@ -24,3 +24,8 @@ android/key.properties
 AQUACAMPUS-main/
 AQUACAMPUS_ROOT_SETUP.ps1
 *.zip
+
+# Local Firebase account/project binding and CLI state
+.firebaserc
+firebase-debug.log
+firebase-debug.*.log
