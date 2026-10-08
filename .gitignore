@@ -29,3 +29,6 @@ AQUACAMPUS_ROOT_SETUP.ps1
 .firebaserc
 firebase-debug.log
 firebase-debug.*.log
+
+# Local Firebase Android client config (download from aquacampus-ed284)
+android/app/google-services.json
