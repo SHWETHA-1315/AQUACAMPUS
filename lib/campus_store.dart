@@ -330,13 +330,14 @@ class CampusStore extends ChangeNotifier {
     }
   }
 
+  // Unconfigured policies are never filled with fabricated water quantities.
   double lowWaterThreshold(Map<String, dynamic> f) =>
-      f['lowWaterThresholdLitres'] == null ? 500
+      f['lowWaterThresholdLitres'] == null ? 0
       : nval(f['lowWaterThresholdLitres']).toDouble().clamp(0.0, 100000000.0);
 
   double essentialRate(Map<String, dynamic> f) =>
-      f['essentialLitresPerResident'] == null ? 30
-      : nval(f['essentialLitresPerResident']).toDouble().clamp(1.0, 1000.0);
+      f['essentialLitresPerResident'] == null ? 0
+      : nval(f['essentialLitresPerResident']).toDouble().clamp(0.0, 1000.0);
 
   List<Map<String, dynamic>> readingHistory(String tankId) {
     final items = tankReadings.where((r) => r['tankId'] == tankId).toList();
@@ -351,8 +352,8 @@ class CampusStore extends ChangeNotifier {
       required int floors,
       required int restrooms,
       required double dailyCapLitres,
-      double lowWaterThresholdLitres = 500,
-      double essentialLitresPerResident = 30}) async {
+      required double lowWaterThresholdLitres,
+      required double essentialLitresPerResident}) async {
     if (!isAdmin) throw StateError('Admin access required');
     final item = {
       'name': name.trim(),
