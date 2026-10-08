@@ -9,6 +9,14 @@ on:
         description: 'Type aquacampus-ed284 to confirm production deployment'
         type: string
         required: true
+      admin_email:
+        description: 'Optional: verified Firebase email registered through Android app for FIRST Admin'
+        type: string
+        required: false
+      confirm_admin_email:
+        description: 'To activate first Admin, repeat the exact same email'
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -77,8 +85,24 @@ jobs:
           npx firebase-tools deploy --project aquacampus-ed284 --only auth,firestore:rules --non-interactive
           echo "Cloud deploy finished. Verify project Auth and deployed rule version in Firebase Console."
 
+      - name: Activate first verified Admin account (optional, no fake accounts)
+        if: inputs.admin_email != ''
+        env:
+          ADMIN_EMAIL: ${{ inputs.admin_email }}
+          CONFIRM_ADMIN_EMAIL: ${{ inputs.confirm_admin_email }}
+        run: |
+          set -euo pipefail
+          [[ -n "$ADMIN_EMAIL" && "$ADMIN_EMAIL" == "$CONFIRM_ADMIN_EMAIL" ]] || {
+            echo "::error::First Admin email must be repeated exactly."
+            exit 1
+          }
+          python3 -m pip install --quiet firebase-admin
+          python3 tools/bootstrap_admin.py --email "$ADMIN_EMAIL" --confirm-email "$CONFIRM_ADMIN_EMAIL"
+          echo "Verified first Admin activated in Firebase." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Mark verified cloud deployment
         run: |
           echo "Firebase Auth + Firestore rules deployed to aquacampus-ed284" >> "$GITHUB_STEP_SUMMARY"
           echo "All 12 rules-security tests passed before the deployment." >> "$GITHUB_STEP_SUMMARY"
-          echo "Note: Android real-user sign-in, first-admin approval, and two-phone testing remain separate acceptance checks." >> "$GITHUB_STEP_SUMMARY"
+          echo "Cloud rule deployment verified. First Admin activation runs only if a real registered verified email was explicitly provided." >> "$GITHUB_STEP_SUMMARY"
+          echo "Two-phone realtime testing remains a separate acceptance check." >> "$GITHUB_STEP_SUMMARY"
