@@ -748,17 +748,22 @@ class StatusPill extends StatelessWidget {
   }
 }
 
-Future<void> execute(BuildContext context, Future<void> Function() operation,
+Future<bool> execute(BuildContext context, Future<void> Function() operation,
     {String success = 'Saved successfully'}) async {
   try {
     await operation();
-    if (!context.mounted) return;
+    if (!context.mounted) return true;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(success), backgroundColor: sea));
-  } catch (e) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('$e'), backgroundColor: const Color(0xFFAD4537)));
+    return true;
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$error'),
+            backgroundColor: const Color(0xFFB74335)),
+      );
+    }
+    return false;
   }
 }
 
@@ -1298,7 +1303,7 @@ class FacilitiesPage extends StatelessWidget {
                         content: Text('Enter valid numbers for each field')));
                     return;
                   }
-                  await execute(ctx, () => store.updateFacility(
+                  final saved = await execute(ctx, () => store.updateFacility(
                         '${facility['id']}',
                         name: name.text,
                         occupants: residents,
@@ -1308,7 +1313,7 @@ class FacilitiesPage extends StatelessWidget {
                         lowWaterThresholdLitres: lowLevel,
                         essentialLitresPerResident: rate,
                       ), success: 'Water management policy saved');
-                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (saved && ctx.mounted) Navigator.pop(ctx);
                 }, child: const Text('Save changes')),
               ],
             ));
@@ -1421,7 +1426,7 @@ class FacilitiesPage extends StatelessWidget {
                                         Text('Enter valid positive values')));
                             return;
                           }
-                          await execute(
+                          final saved = await execute(
                               context,
                               () => store.addFacility(
                                   name: name.text,
@@ -1435,7 +1440,7 @@ class FacilitiesPage extends StatelessWidget {
                                   essentialLitresPerResident:
                                       type == 'hostel' ? rate ?? 1 : 1),
                               success: 'Facility created');
-                          if (context.mounted) Navigator.pop(context);
+                          if (saved && context.mounted) Navigator.pop(context);
                         },
                         child: const Text('Save'))
                   ],
@@ -1571,10 +1576,10 @@ class TanksPage extends StatelessWidget {
                                   Text('Reading must fit tank dimensions')));
                           return;
                         }
-                        await execute(ctx,
+                        final saved = await execute(ctx,
                             () => store.recordReading('${tank['id']}', value),
                             success: 'Manual tank reading saved');
-                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (saved && ctx.mounted) Navigator.pop(ctx);
                       },
                       child: const Text('Save reading'))
                 ]));
@@ -1682,7 +1687,7 @@ class TanksPage extends StatelessWidget {
                                         'Complete valid tank dimensions')));
                             return;
                           }
-                          await execute(
+                          final saved = await execute(
                               ctx,
                               () => store.addTank(
                                   name: name.text,
@@ -1693,7 +1698,7 @@ class TanksPage extends StatelessWidget {
                                   heightCm: h,
                                   diameterCm: d ?? 0),
                               success: 'Tank registered');
-                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (saved && ctx.mounted) Navigator.pop(ctx);
                         },
                         child: const Text('Create'))
                   ],
@@ -1893,7 +1898,7 @@ class RequestsPage extends StatelessWidget {
                                     'Enter valid people/loads and water rate')));
                             return;
                           }
-                          await execute(
+                          final saved = await execute(
                               ctx,
                               () => store.addRequest(
                                   facilityId: facilityId,
@@ -1902,7 +1907,7 @@ class RequestsPage extends StatelessWidget {
                                   litresPerPerson: value,
                                   notes: notes.text),
                               success: 'Request sent to water worker');
-                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (saved && ctx.mounted) Navigator.pop(ctx);
                         },
                         child: const Text('Send request'))
                   ],
@@ -1953,12 +1958,12 @@ class RequestsPage extends StatelessWidget {
                               content: Text('Invalid approval quantity')));
                           return;
                         }
-                        await execute(
+                        final saved = await execute(
                             ctx,
                             () => store.decideRequest('${request['id']}',
                                 approve: true, approvedLitres: value),
                             success: 'Water approved for worker supply');
-                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (saved && ctx.mounted) Navigator.pop(ctx);
                       },
                       child: const Text('Approve'))
                 ]));
@@ -2123,7 +2128,7 @@ class SOSPage extends StatelessWidget {
                                     'Enter a valid floor, location and description')));
                             return;
                           }
-                          await execute(
+                          final saved = await execute(
                               ctx,
                               () => store.createSOS(
                                   facilityId: facilityId,
@@ -2132,7 +2137,7 @@ class SOSPage extends StatelessWidget {
                                   detail: details.text),
                               success:
                                   'SOS sent to campus water workers and admins');
-                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (saved && ctx.mounted) Navigator.pop(ctx);
                         },
                         child: const Text('SEND SOS'))
                   ],
@@ -2230,10 +2235,10 @@ class NoticesPage extends StatelessWidget {
                                       content: Text('Type a message')));
                               return;
                             }
-                            await execute(ctx,
+                            final saved = await execute(ctx,
                                 () => store.postNotice(target, content.text),
                                 success: 'Broadcast posted');
-                            if (ctx.mounted) Navigator.pop(ctx);
+                            if (saved && ctx.mounted) Navigator.pop(ctx);
                           },
                           child: const Text('Broadcast'))
                     ])));
@@ -2347,7 +2352,7 @@ class MembersPage extends StatelessWidget {
                                       'Students and wardens need a valid hostel')));
                               return;
                             }
-                            await execute(
+                            final saved = await execute(
                                 ctx,
                                 () => store.changeMember('${member['id']}',
                                     approved: approved,
@@ -2355,7 +2360,7 @@ class MembersPage extends StatelessWidget {
                                     facilityId: facilityId,
                                     room: room.text),
                                 success: 'Member permissions updated');
-                            if (ctx.mounted) Navigator.pop(ctx);
+                            if (saved && ctx.mounted) Navigator.pop(ctx);
                           },
                           child: const Text('Save member'))
                     ])));
