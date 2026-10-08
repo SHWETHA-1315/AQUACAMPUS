@@ -1,0 +1,84 @@
+name: Deploy AQUACAMPUS Firebase Cloud Backend
+
+# Runs only with explicit owner authorization and federated Google Cloud IAM.
+# This does NOT deploy a website, fake data, or an unauthenticated demo.
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: 'Type aquacampus-ed284 to confirm production deployment'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aquacampus-firebase-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'SHWETHA-1315/AQUACAMPUS' && inputs.project == 'aquacampus-ed284'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: firebase-production
+    steps:
+      - name: Fetch verified backend rules
+        uses: actions/checkout@v4
+
+      - name: Confirm cloud target and credentials configuration
+        env:
+          WIF_PROVIDER: ${{ vars.FIREBASE_WIF_PROVIDER }}
+          DEPLOY_SA: ${{ vars.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          [[ -n "$WIF_PROVIDER" && -n "$DEPLOY_SA" ]] || {
+            echo "::error::Google Cloud owner must authorize GitHub first. Configure FIREBASE_WIF_PROVIDER and FIREBASE_DEPLOY_SERVICE_ACCOUNT as GitHub environment variables for firebase-production."
+            exit 1
+          }
+          [[ "$WIF_PROVIDER" == projects/912969196848/locations/global/workloadIdentityPools/* ]] || {
+            echo "::error::Wrong Google Cloud project in WIF provider."
+            exit 1
+          }
+
+      - name: Set up Node for emulator and deployment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java for Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install backend testing and Firebase CLI dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify Firestore security rules before cloud deployment
+        run: npm run test:emulator
+
+      - name: Authenticate GitHub to project-owner Google Cloud identity
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: aquacampus-ed284
+          workload_identity_provider: ${{ vars.FIREBASE_WIF_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Deploy Email/Password Authentication and Firestore rules
+        env:
+          GOOGLE_CLOUD_PROJECT: aquacampus-ed284
+        run: |
+          set -euo pipefail
+          npx firebase-tools deploy --project aquacampus-ed284 --only auth,firestore:rules --non-interactive
+          echo "Cloud deploy finished. Verify project Auth and deployed rule version in Firebase Console."
+
+      - name: Mark verified cloud deployment
+        run: |
+          echo "Firebase Auth + Firestore rules deployed to aquacampus-ed284" >> "$GITHUB_STEP_SUMMARY"
+          echo "All 12 rules-security tests passed before the deployment." >> "$GITHUB_STEP_SUMMARY"
+          echo "Note: Android real-user sign-in, first-admin approval, and two-phone testing remain separate acceptance checks." >> "$GITHUB_STEP_SUMMARY"
