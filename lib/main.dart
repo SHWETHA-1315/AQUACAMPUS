@@ -1834,7 +1834,8 @@ class RequestsPage extends StatelessWidget {
           const SnackBar(content: Text('Admin must assign a facility first')));
       return;
     }
-    String facilityId = '${choices.first['id']}', activity = 'Laundry';
+    String facilityId = '${choices.first['id']}';
+    String? activity;
     final people = TextEditingController(),
         rate = TextEditingController(),
         notes = TextEditingController();
@@ -1867,7 +1868,7 @@ class RequestsPage extends StatelessWidget {
                             DropdownMenuItem(value: a, child: Text(a))
                         ],
                         onChanged: (v) =>
-                            setDialog(() => activity = v ?? activity)),
+                            setDialog(() => activity = v)),
                     const SizedBox(height: 10),
                     TextField(
                         controller: people,
@@ -1909,7 +1910,8 @@ class RequestsPage extends StatelessWidget {
                         onPressed: () async {
                           final count = int.tryParse(people.text),
                               value = double.tryParse(rate.text);
-                          if (count == null ||
+                          if (activity == null ||
+                              count == null ||
                               count < 1 ||
                               count > 500 ||
                               value == null ||
@@ -1925,7 +1927,7 @@ class RequestsPage extends StatelessWidget {
                               ctx,
                               () => store.addRequest(
                                   facilityId: facilityId,
-                                  activity: activity,
+                                  activity: activity!,
                                   peopleCount: count,
                                   litresPerPerson: value,
                                   notes: notes.text),
