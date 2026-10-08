@@ -48,8 +48,8 @@ jobs:
               "--dart-define=FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID" \
               "--dart-define=FIREBASE_AUTH_DOMAIN=$FIREBASE_AUTH_DOMAIN"
           else
-            echo 'Firebase secrets not configured; compiling offline demo APK.'
-            flutter build apk --release
+            echo 'Firebase Android configuration is required; no unconfigured APK is published.'
+            exit 1
           fi
       - name: Save APK to Actions artifacts
         uses: actions/upload-artifact@v4
