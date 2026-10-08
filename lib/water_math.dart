@@ -37,9 +37,11 @@ class WaterMath {
     );
   }
 
-  static double nonNegative(num? number) => math.max(0.0, (number ?? 0).toDouble());
+  static double nonNegative(num? number) =>
+      math.max(0.0, (number ?? 0).toDouble());
 
-  static double perPersonShare(double litres, int people, {double reserveFraction = 0.15}) {
+  static double perPersonShare(double litres, int people,
+      {double reserveFraction = 0.15}) {
     if (people <= 0) return 0;
     return math.max(0.0, litres * (1 - reserveFraction.clamp(0, 1)) / people);
   }
