@@ -116,12 +116,18 @@ test('worker manual tank updates have an immutable, linked audit record',async()
   await assertFails(setDoc(doc(db,path('tankReadings','forged')),{
     tankId:'tank-1',facilityId:'canteen-1',waterHeightCm:2,
     estimatedLitres:20,measuredAt:time,recordedBy:'worker'}));
+  // The tank is now at 23 cm (230 L); an invented litre estimate is rejected.
+  await assertFails(setDoc(doc(db,path('tankReadings','wrong-litres')),{
+    tankId:'tank-1',facilityId:'hostel-1',waterHeightCm:23,
+    estimatedLitres:99999,measuredAt:time,recordedBy:'worker'}));
 });
 test('student can send real request but cannot approve it',async()=>{
   const db=context('student','student@campus.test');
   await assertSucceeds(setDoc(doc(db,path('requests','request-2')),waterRequest()));
   await assertFails(updateDoc(doc(db,path('requests','request-2')),
     {status:'approved',approvedLitres:20,approvedBy:'student',reviewedAt:time}));
+  await assertFails(setDoc(doc(db,path('requests','fake-quantity')),
+    {...waterRequest(),quantityLitres:500}));
 });
 test('worker can approve and fulfill valid requests, not bypass approval',async()=>{
   const db=context('worker','worker@campus.test');
