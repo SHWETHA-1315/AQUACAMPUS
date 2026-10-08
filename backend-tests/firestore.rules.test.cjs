@@ -1,0 +1,164 @@
+// Offline Firebase emulator tests ONLY. No production accounts are created.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const {initializeTestEnvironment, assertSucceeds, assertFails} =
+  require('@firebase/rules-unit-testing');
+const {doc, setDoc, updateDoc, getDoc, getDocs, collection, query, where, writeBatch} =
+  require('firebase/firestore');
+
+const projectId = 'demo-aquacampus-rules';
+const time = '2026-10-08T07:00:00.000Z';
+const facility = (type = 'hostel') => ({
+  name: type === 'canteen' ? 'Real Canteen' : 'Real Hostel',
+  type,
+  occupants: type === 'hostel' ? 3 : 0,
+  floors: 2,
+  restrooms: 3,
+  dailyCapLitres: type === 'canteen' ? 100 : 0,
+  lowWaterThresholdLitres: 30,
+  essentialLitresPerResident: type === 'hostel' ? 30 : 1,
+  createdAt: time
+});
+const tank = () => ({
+  name:'Water tank A',facilityId:'hostel-1',shape:'rect',
+  lengthCm:100,widthCm:100,heightCm:100,diameterCm:0,
+  waterHeightCm:0,lastMeasuredAt:'',createdAt:time
+});
+const profile = (email, role, approved, facilityId = 'hostel-1') => ({
+  name: email.split('@')[0], email, role, approved,
+  campusId:'main',facilityId,room:'104',createdAt:time
+});
+const waterRequest = (requestedBy = 'student') => ({
+  facilityId:'hostel-1',activity:'Laundry',peopleCount:2,
+  litresPerPerson:15,quantityLitres:30,
+  approvedLitres:0,notes:'Clothes wash',requestedBy,
+  requestedByName:'Student',room:'104',status:'pending',createdAt:time,
+  approvedBy:'',fulfilledBy:'',fulfilledAt:''
+});
+
+let env;
+function context(id, email) { return env.authenticatedContext(id, {email}).firestore(); }
+const path = (root, tail) => 'campuses/main/' + root + '/' + tail;
+test.before(async () => {
+  env = await initializeTestEnvironment({
+    projectId, firestore:{host:'127.0.0.1',port:8080,
+      rules: fs.readFileSync('firestore.rules', 'utf8')}
+  });
+});
+test.after(async () => { if (env) await env.cleanup(); });
+test.beforeEach(async () => {
+  await env.clearFirestore();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db=ctx.firestore();
+    for (const [id,email,role,approved,facilityId] of [
+      ['admin','admin@campus.test','admin',true,''],
+      ['worker','worker@campus.test','worker',true,''],
+      ['warden','warden@campus.test','warden',true,'hostel-1'],
+      ['student','student@campus.test','student',true,'hostel-1'],
+      ['second','second@campus.test','student',true,'hostel-1'],
+      ['pending','pending@campus.test','student',false,''],
+    ]) {
+      await setDoc(doc(db, 'users', id), profile(email,role,approved,facilityId));
+    }
+    await setDoc(doc(db, path('facilities','hostel-1')),facility());
+    await setDoc(doc(db, path('facilities','canteen-1')),facility('canteen'));
+    await setDoc(doc(db, path('tanks','tank-1')),tank());
+    await setDoc(doc(db,path('requests','request-1')),waterRequest());
+  });
+});
+test('anonymous and unapproved accounts cannot read campus records', async () => {
+  const anon=env.unauthenticatedContext().firestore();
+  const pending=context('pending','pending@campus.test');
+  await assertFails(getDoc(doc(anon,path('facilities','hostel-1'))));
+  await assertFails(getDoc(doc(pending,path('facilities','hostel-1'))));
+});
+test('registration creates only an unapproved student, without arbitrary fields', async () => {
+  const db=context('fresh','fresh@campus.test');
+  const valid=profile('fresh@campus.test','student',false,'');
+  valid.room='';
+  await assertSucceeds(setDoc(doc(db,'users','fresh'),valid));
+  await assertFails(setDoc(doc(db,'users','fresh-other'),valid));
+  const db2=context('new2','new2@campus.test');
+  await assertFails(setDoc(doc(db2,'users','new2'),
+    {...valid,email:'new2@campus.test',role:'admin',approved:true}));
+});
+test('students cannot grant themselves privileges or see other private requests',async()=>{
+  const db=context('student','student@campus.test');
+  await assertFails(updateDoc(doc(db,'users','student'),{approved:true,role:'admin'}));
+  await assertFails(getDoc(doc(db,path('requests','second-request'))));
+});
+test('admin alone can edit facilities but cannot change original type',async()=>{
+  const db=context('admin','admin@campus.test');
+  const student=context('student','student@campus.test');
+  await assertSucceeds(setDoc(doc(db,path('facilities','hostel-2')),facility()));
+  await assertFails(setDoc(doc(student,path('facilities','hostel-3')),facility()));
+  await assertSucceeds(updateDoc(doc(db,path('facilities','hostel-1')),
+    {occupants:5,lowWaterThresholdLitres:40,updatedAt:time,updatedBy:'admin'}));
+  await assertFails(updateDoc(doc(db,path('facilities','hostel-1')),{type:'canteen',updatedBy:'admin'}));
+  await assertFails(updateDoc(doc(db,path('facilities','hostel-1')),{occupants:-8,updatedBy:'admin'}));
+});
+test('worker manual tank updates have an immutable, linked audit record',async()=>{
+  const db=context('worker','worker@campus.test');
+  const docRef=doc(db,path('tanks','tank-1'));
+  const reading=doc(db,path('tankReadings','reading-1'));
+  const batch=writeBatch(db);
+  batch.update(docRef,{waterHeightCm:23,lastMeasuredAt:time,updatedBy:'worker'});
+  batch.set(reading,{tankId:'tank-1',facilityId:'hostel-1',waterHeightCm:23,
+    estimatedLitres:230,measuredAt:time,recordedBy:'worker'});
+  await assertSucceeds(batch.commit());
+  await assertFails(updateDoc(reading,{waterHeightCm:80}));
+  await assertFails(updateDoc(docRef,{shape:'cylinder',updatedBy:'worker'}));
+  await assertFails(setDoc(doc(db,path('tankReadings','forged')),{
+    tankId:'tank-1',facilityId:'canteen-1',waterHeightCm:2,
+    estimatedLitres:20,measuredAt:time,recordedBy:'worker'}));
+});
+test('student can send real request but cannot approve it',async()=>{
+  const db=context('student','student@campus.test');
+  await assertSucceeds(setDoc(doc(db,path('requests','request-2')),waterRequest()));
+  await assertFails(updateDoc(doc(db,path('requests','request-2')),
+    {status:'approved',approvedLitres:20,approvedBy:'student',reviewedAt:time}));
+});
+test('worker can approve and fulfill valid requests, not bypass approval',async()=>{
+  const db=context('worker','worker@campus.test');
+  await assertFails(updateDoc(doc(db,path('requests','request-1')),
+    {status:'fulfilled',fulfilledBy:'worker',fulfilledAt:time}));
+  await assertSucceeds(updateDoc(doc(db,path('requests','request-1')),
+    {status:'approved',approvedLitres:20,approvedBy:'worker',reviewedAt:time}));
+  await assertSucceeds(updateDoc(doc(db,path('requests','request-1')),
+    {status:'fulfilled',fulfilledBy:'worker',fulfilledAt:time}));
+});
+test('warden requests limited to own hostel',async()=>{
+  const db=context('warden','warden@campus.test');
+  await assertSucceeds(getDoc(doc(db,path('requests','request-1'))));
+  await assertFails(setDoc(doc(db,path('requests','canteen-attempt')),
+    {...waterRequest('warden'),facilityId:'canteen-1'}));
+});
+test('canteen daily usage cap cannot be bypassed',async()=>{
+  const db=context('worker','worker@campus.test');
+  const valid={facilityId:'canteen-1',day:'2026-10-08',usedLitres:95,updatedBy:'worker'};
+  await assertSucceeds(setDoc(doc(db,path('dailyUsage','2026-10-08_canteen-1')),valid));
+  await assertFails(updateDoc(doc(db,path('dailyUsage','2026-10-08_canteen-1')),
+    {usedLitres:125}));
+});
+test('SOS can be reported but only staff can read incident details',async()=>{
+  const student=context('student','student@campus.test');
+  const worker=context('worker','worker@campus.test');
+  const report={facilityId:'hostel-1',floor:1,restroom:'Restroom 2',
+    detail:'Water leakage at the pipe',createdBy:'student',
+    createdByName:'Student',status:'open',createdAt:time,resolvedAt:''};
+  await assertSucceeds(setDoc(doc(student,path('sos','incident-1')),report));
+  await assertFails(getDoc(doc(student,path('sos','incident-1'))));
+  await assertSucceeds(getDoc(doc(worker,path('sos','incident-1'))));
+  await assertSucceeds(updateDoc(doc(worker,path('sos','incident-1')),
+    {status:'resolved',resolvedBy:'worker',resolvedAt:time}));
+});
+test('admin notices are visible to approved members, never unapproved',async()=>{
+  const admin=context('admin','admin@campus.test');
+  const student=context('student','student@campus.test');
+  const pending=context('pending','pending@campus.test');
+  await assertSucceeds(setDoc(doc(admin,path('notices','notice-1')),
+    {targetFacilityId:'',message:'Campus water update',createdBy:'admin',createdAt:time}));
+  await assertSucceeds(getDoc(doc(student,path('notices','notice-1'))));
+  await assertFails(getDoc(doc(pending,path('notices','notice-1'))));
+});
