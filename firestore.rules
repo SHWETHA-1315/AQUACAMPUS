@@ -45,7 +45,16 @@ service cloud.firestore {
         resource.data.campusId == 'main' &&
         request.resource.data.campusId == resource.data.campusId &&
         request.resource.data.email == resource.data.email &&
-        request.resource.data.role in ['admin','worker','warden','student','teacher'];
+        request.resource.data.role in ['admin','worker','warden','student','teacher'] &&
+        request.resource.data.approved is bool &&
+        request.resource.data.facilityId is string &&
+        request.resource.data.room is string &&
+        request.resource.data.room.size() <= 80 &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'role','approved','facilityId','room'
+        ]) &&
+        (request.resource.data.facilityId == '' ||
+          facilityExists('main', request.resource.data.facilityId));
       allow delete: if false;
     }
 
@@ -54,7 +63,16 @@ service cloud.firestore {
 
       match /facilities/{fid} {
         function validFacility() {
-          return request.resource.data.type in ['hostel','college','canteen'] &&
+          return request.resource.data.keys().hasAll([
+              'name','type','occupants','floors','restrooms','dailyCapLitres',
+              'lowWaterThresholdLitres','essentialLitresPerResident','createdAt'
+            ]) &&
+            request.resource.data.keys().hasOnly([
+              'name','type','occupants','floors','restrooms','dailyCapLitres',
+              'lowWaterThresholdLitres','essentialLitresPerResident','createdAt',
+              'updatedAt','updatedBy'
+            ]) &&
+            request.resource.data.type in ['hostel','college','canteen'] &&
             request.resource.data.name is string &&
             request.resource.data.name.size() > 0 &&
             request.resource.data.name.size() <= 120 &&
@@ -89,16 +107,44 @@ service cloud.firestore {
       match /tanks/{tankId} {
         allow read: if active() && campus == 'main';
         allow create: if isAdmin() && campus == 'main' &&
+          request.resource.data.keys().hasAll([
+            'name','facilityId','shape','lengthCm','widthCm','heightCm',
+            'diameterCm','waterHeightCm','lastMeasuredAt','createdAt'
+          ]) &&
+          request.resource.data.keys().hasOnly([
+            'name','facilityId','shape','lengthCm','widthCm','heightCm',
+            'diameterCm','waterHeightCm','lastMeasuredAt','createdAt'
+          ]) &&
+          request.resource.data.name is string &&
+          request.resource.data.name.size() > 0 &&
+          request.resource.data.name.size() <= 120 &&
           facilityExists(campus, request.resource.data.facilityId) &&
           request.resource.data.shape in ['rect','cylinder'] &&
-          request.resource.data.heightCm is number && request.resource.data.heightCm > 0 &&
-          request.resource.data.waterHeightCm == 0;
-        allow update: if isAdmin() || (isWorker() &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['waterHeightCm','lastMeasuredAt','updatedBy']) &&
+          request.resource.data.heightCm is number &&
+          request.resource.data.heightCm > 0 &&
+          request.resource.data.heightCm <= 100000 &&
+          request.resource.data.lengthCm is number &&
+          request.resource.data.widthCm is number &&
+          request.resource.data.diameterCm is number &&
+          request.resource.data.lengthCm >= 0 &&
+          request.resource.data.widthCm >= 0 &&
+          request.resource.data.diameterCm >= 0 &&
+          (request.resource.data.shape == 'rect' ?
+            (request.resource.data.lengthCm > 0 &&
+             request.resource.data.widthCm > 0) :
+            request.resource.data.diameterCm > 0) &&
+          request.resource.data.waterHeightCm == 0 &&
+          request.resource.data.lastMeasuredAt == '';
+        allow update: if isStaff() && campus == 'main' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'waterHeightCm','lastMeasuredAt','updatedBy'
+          ]) &&
           request.resource.data.waterHeightCm is number &&
           request.resource.data.waterHeightCm >= 0 &&
           request.resource.data.waterHeightCm <= resource.data.heightCm &&
-          request.resource.data.updatedBy == request.auth.uid);
+          request.resource.data.lastMeasuredAt is string &&
+          request.resource.data.lastMeasuredAt.size() > 0 &&
+          request.resource.data.updatedBy == request.auth.uid;
         allow delete: if false;
       }
 
@@ -109,12 +155,25 @@ service cloud.firestore {
           request.resource.data.keys().hasAll([
             'tankId','facilityId','waterHeightCm','estimatedLitres','measuredAt','recordedBy'
           ]) &&
+          request.resource.data.keys().hasOnly([
+            'tankId','facilityId','waterHeightCm','estimatedLitres','measuredAt','recordedBy'
+          ]) &&
           request.resource.data.recordedBy == request.auth.uid &&
+          request.resource.data.measuredAt is string &&
+          request.resource.data.measuredAt.size() > 0 &&
+          request.resource.data.estimatedLitres is number &&
+          request.resource.data.estimatedLitres >= 0 &&
           exists(/databases/$(database)/documents/campuses/$(campus)/tanks/$(request.resource.data.tankId)) &&
+          request.resource.data.facilityId ==
+            get(/databases/$(database)/documents/campuses/$(campus)/tanks/$(request.resource.data.tankId)).data.facilityId &&
           request.resource.data.waterHeightCm is number &&
           request.resource.data.waterHeightCm >= 0 &&
           request.resource.data.waterHeightCm <=
-            get(/databases/$(database)/documents/campuses/$(campus)/tanks/$(request.resource.data.tankId)).data.heightCm;
+            get(/databases/$(database)/documents/campuses/$(campus)/tanks/$(request.resource.data.tankId)).data.heightCm &&
+          getAfter(/databases/$(database)/documents/campuses/$(campus)/tanks/$(request.resource.data.tankId)).data.waterHeightCm ==
+            request.resource.data.waterHeightCm &&
+          getAfter(/databases/$(database)/documents/campuses/$(campus)/tanks/$(request.resource.data.tankId)).data.updatedBy ==
+            request.auth.uid;
         allow update, delete: if false;
       }
 
@@ -132,7 +191,15 @@ service cloud.firestore {
           request.resource.data.peopleCount >= 1 && request.resource.data.peopleCount <= 500 &&
           request.resource.data.quantityLitres is number &&
           request.resource.data.quantityLitres > 0 && request.resource.data.quantityLitres <= 500000 &&
-          request.resource.data.approvedLitres == 0;
+          request.resource.data.approvedLitres == 0 &&
+          request.resource.data.activity in [
+            'Bathing','Laundry','Room cleaning','Cooking','Utensil washing','Other'
+          ] &&
+          request.resource.data.litresPerPerson is number &&
+          request.resource.data.litresPerPerson > 0 &&
+          request.resource.data.litresPerPerson <= 1000 &&
+          request.resource.data.notes is string &&
+          request.resource.data.notes.size() <= 2000;
         // Only worker/admin can accept/reject or mark a delivery fulfilled.
         allow update: if isStaff() && campus == 'main' &&
           request.resource.data.requestedBy == resource.data.requestedBy &&
@@ -177,7 +244,13 @@ service cloud.firestore {
           canReportSOS(campus, request.resource.data.facilityId) &&
           request.resource.data.createdBy == request.auth.uid &&
           request.resource.data.status == 'open' &&
-          request.resource.data.floor is int && request.resource.data.floor >= 0;
+          request.resource.data.floor is int && request.resource.data.floor >= 0 &&
+          request.resource.data.restroom is string &&
+          request.resource.data.restroom.size() > 0 &&
+          request.resource.data.restroom.size() <= 120 &&
+          request.resource.data.detail is string &&
+          request.resource.data.detail.size() >= 5 &&
+          request.resource.data.detail.size() <= 2000;
         allow update: if isStaff() && campus == 'main' &&
           resource.data.status == 'open' && request.resource.data.status == 'resolved' &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','resolvedAt','resolvedBy']) &&
