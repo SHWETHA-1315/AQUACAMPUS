@@ -7,6 +7,10 @@ on:
       - 'firebase.json'
       - 'package.json'
       - 'backend-tests/**'
+      - 'tools/bootstrap_admin.py'
+      - 'BOOTSTRAP_ADMIN.ps1'
+      - 'START_AQUACAMPUS_FIREBASE.ps1'
+      - '.github/workflows/firebase-cloud-deploy.yml'
       - '.github/workflows/backend-security.yml'
 jobs:
   firestore-rules:
