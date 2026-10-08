@@ -1008,7 +1008,13 @@ class FacilitiesPage extends StatelessWidget {
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w800,
                                     fontSize: 16))),
-                        StatusPill(type)
+                        StatusPill(type),
+                        if (store.isAdmin)
+                          IconButton(
+                            onPressed: () => _editFacility(context, f),
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Edit water policy',
+                          )
                       ]),
                       _labelValue('Floors', '${f['floors']}'),
                       _labelValue('Restrooms', '${f['restrooms']}'),
@@ -1017,11 +1023,112 @@ class FacilitiesPage extends StatelessWidget {
                       if (type == 'canteen')
                         _labelValue('Daily supply cap',
                             litres(nval(f['dailyCapLitres']))),
+                      _labelValue('Low-water warning level',
+                          litres(store.lowWaterThreshold(f))),
+                      if (type == 'hostel')
+                        _labelValue('Essential planning baseline',
+                          '${formatter.format(store.essentialRate(f))} L / resident / day'),
                       _labelValue('Estimated tank water',
                           litres(store.availableFor('${f['id']}'))),
                     ])),
             ],
           ]);
+  Future<void> _editFacility(
+      BuildContext context, Map<String, dynamic> facility) async {
+    final name = TextEditingController(text: '${facility['name']}');
+    final people = TextEditingController(text: '${facility['occupants']}');
+    final floors = TextEditingController(text: '${facility['floors']}');
+    final toilets = TextEditingController(text: '${facility['restrooms']}');
+    final cap = TextEditingController(text: '${facility['dailyCapLitres']}');
+    final threshold =
+        TextEditingController(text: '${store.lowWaterThreshold(facility)}');
+    final essential =
+        TextEditingController(text: '${store.essentialRate(facility)}');
+    final isHostel = facility['type'] == 'hostel';
+    final isCanteen = facility['type'] == 'canteen';
+    await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: const Text('Edit campus water policy'),
+              content: SingleChildScrollView(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                TextField(controller: name,
+                    decoration: const InputDecoration(labelText: 'Facility name')),
+                const SizedBox(height: 10),
+                TextField(controller: floors, keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Number of floors')),
+                const SizedBox(height: 10),
+                TextField(controller: toilets, keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Restroom count')),
+                if (isHostel) ...[
+                  const SizedBox(height: 10),
+                  TextField(controller: people, keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Hostel residents')),
+                  const SizedBox(height: 10),
+                  TextField(controller: essential,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Essential litres per resident/day')),
+                ],
+                if (isCanteen) ...[
+                  const SizedBox(height: 10),
+                  TextField(controller: cap,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Daily canteen cap (litres)')),
+                ],
+                const SizedBox(height: 10),
+                TextField(controller: threshold,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Low-water threshold (litres)')),
+                const SizedBox(height: 10),
+                const Text('Low-water alerts appear in the app after workers enter measured levels. Physical supply is manual.',
+                    style: TextStyle(fontSize: 11, color: Colors.black54)),
+              ])),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel')),
+                ElevatedButton(onPressed: () async {
+                  final residents = int.tryParse(people.text);
+                  final floorCount = int.tryParse(floors.text);
+                  final restroomCount = int.tryParse(toilets.text);
+                  final supplyLimit = double.tryParse(cap.text);
+                  final lowLevel = double.tryParse(threshold.text);
+                  final rate = double.tryParse(essential.text);
+                  if (name.text.trim().isEmpty ||
+                      residents == null || residents < 0 ||
+                      (isHostel && residents == 0) ||
+                      floorCount == null || floorCount < 1 ||
+                      restroomCount == null || restroomCount < 0 ||
+                      supplyLimit == null || !supplyLimit.isFinite ||
+                      supplyLimit < 0 || (isCanteen && supplyLimit == 0) ||
+                      lowLevel == null || !lowLevel.isFinite || lowLevel < 0 ||
+                      rate == null || !rate.isFinite || rate < 1 || rate > 1000) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                        content: Text('Enter valid numbers for each field')));
+                    return;
+                  }
+                  await execute(ctx, () => store.updateFacility(
+                        '${facility['id']}',
+                        name: name.text,
+                        occupants: residents,
+                        floors: floorCount,
+                        restrooms: restroomCount,
+                        dailyCapLitres: supplyLimit,
+                        lowWaterThresholdLitres: lowLevel,
+                        essentialLitresPerResident: rate,
+                      ), success: 'Water management policy saved');
+                  if (ctx.mounted) Navigator.pop(ctx);
+                }, child: const Text('Save changes')),
+              ],
+            ));
+    name.dispose();
+    people.dispose();
+    floors.dispose();
+    toilets.dispose();
+    cap.dispose();
+    threshold.dispose();
+    essential.dispose();
+  }
+
   Future<void> _addFacility(BuildContext context) async {
     final name = TextEditingController(),
         people = TextEditingController(text: '100'),
