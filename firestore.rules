@@ -53,12 +53,36 @@ service cloud.firestore {
       allow read, write: if isAdmin() && campus == 'main';
 
       match /facilities/{fid} {
+        function validFacility() {
+          return request.resource.data.type in ['hostel','college','canteen'] &&
+            request.resource.data.name is string &&
+            request.resource.data.name.size() > 0 &&
+            request.resource.data.name.size() <= 120 &&
+            request.resource.data.occupants is int &&
+            request.resource.data.occupants >= 0 &&
+            request.resource.data.floors is int &&
+            request.resource.data.floors >= 1 &&
+            request.resource.data.restrooms is int &&
+            request.resource.data.restrooms >= 0 &&
+            request.resource.data.dailyCapLitres is number &&
+            request.resource.data.dailyCapLitres >= 0 &&
+            (!request.resource.data.keys().hasAny(['lowWaterThresholdLitres']) ||
+              (request.resource.data.lowWaterThresholdLitres is number &&
+                request.resource.data.lowWaterThresholdLitres >= 0)) &&
+            (!request.resource.data.keys().hasAny(['essentialLitresPerResident']) ||
+              (request.resource.data.essentialLitresPerResident is number &&
+                request.resource.data.essentialLitresPerResident >= 1 &&
+                request.resource.data.essentialLitresPerResident <= 1000));
+        }
         allow read: if active() && campus == 'main';
-        allow create, update: if isAdmin() && campus == 'main' &&
-          request.resource.data.type in ['hostel','college','canteen'] &&
-          request.resource.data.dailyCapLitres is number && request.resource.data.dailyCapLitres >= 0 &&
-          request.resource.data.floors is int && request.resource.data.floors >= 1 &&
-          request.resource.data.restrooms is int && request.resource.data.restrooms >= 0;
+        allow create: if isAdmin() && campus == 'main' && validFacility();
+        allow update: if isAdmin() && campus == 'main' && validFacility() &&
+          request.resource.data.type == resource.data.type &&
+          request.resource.data.updatedBy == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name','occupants','floors','restrooms','dailyCapLitres',
+            'lowWaterThresholdLitres','essentialLitresPerResident','updatedBy','updatedAt'
+          ]);
         allow delete: if false;
       }
 
@@ -76,6 +100,22 @@ service cloud.firestore {
           request.resource.data.waterHeightCm <= resource.data.heightCm &&
           request.resource.data.updatedBy == request.auth.uid);
         allow delete: if false;
+      }
+
+      match /tankReadings/{readingId} {
+        // Staff-only, immutable manual readings. Not a live sensor feed.
+        allow read: if isStaff() && campus == 'main';
+        allow create: if isStaff() && campus == 'main' &&
+          request.resource.data.keys().hasAll([
+            'tankId','facilityId','waterHeightCm','estimatedLitres','measuredAt','recordedBy'
+          ]) &&
+          request.resource.data.recordedBy == request.auth.uid &&
+          exists(/databases/$(database)/documents/campuses/$(campus)/tanks/$(request.resource.data.tankId)) &&
+          request.resource.data.waterHeightCm is number &&
+          request.resource.data.waterHeightCm >= 0 &&
+          request.resource.data.waterHeightCm <=
+            get(/databases/$(database)/documents/campuses/$(campus)/tanks/$(request.resource.data.tankId)).data.heightCm;
+        allow update, delete: if false;
       }
 
       match /requests/{requestId} {
