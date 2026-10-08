@@ -4,7 +4,7 @@
 
 ## Build the Android APK
 
-**Status:** This project is Flutter/Dart source. A release APK has **not been compiled in this environment** because Flutter and Android SDKs are unavailable and network download is restricted. Do not rename a ZIP file to .apk.
+**Build:** GitHub Actions compiles and uploads a real Android APK; inspect the latest workflow run for success. The default APK is an offline single-phone demo until Firebase is configured. Never rename a ZIP file to .apk.
 
 On a Windows PC with Flutter + Android SDK, run `./build_apk.ps1` from PowerShell. It generates `release/AQUACAMPUS-v1.1-android.apk` after passing Flutter tests and release build. The included `.github/workflows/android-apk.yml` also builds the installable offline-demo APK when these sources are committed to GitHub and the Actions workflow succeeds.
 
@@ -111,3 +111,10 @@ pubspec.yaml
 ```
 
 License: MIT. No web HTML UI is included.
+
+
+## Live backend and production readiness
+
+See [Firebase live campus setup](docs/FIREBASE_LIVE_SETUP.md) for multi-phone login, secure first-admin bootstrap, Firestore rules, deployment, Android live APK and acceptance testing.
+
+**Recent improvements:** admin-editable hostel occupants / floors / restrooms / canteen cap / low-water threshold / essential-use baseline; automatic in-app low-water warnings, a priority-aware water budget engine and staff-only manual tank-reading audit history. These are software calculations on human-entered data.
