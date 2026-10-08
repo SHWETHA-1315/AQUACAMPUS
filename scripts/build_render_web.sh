@@ -15,6 +15,11 @@ flutter --version
 flutter config --enable-web
 if [ ! -f web/index.html ]; then
   flutter create --platforms=web --project-name aquacampus .
+  # A generated Flutter template test expects MyApp, but AQUACAMPUS has a
+  # different root widget. Keep project-specific tests, remove only template.
+  if [ -f test/widget_test.dart ]; then
+    rm test/widget_test.dart
+  fi
 fi
 flutter pub get
 flutter test
