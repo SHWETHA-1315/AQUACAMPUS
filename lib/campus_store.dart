@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 import 'water_math.dart';
+import 'firebase_android_config.dart';
 
 const roleNames = ['admin', 'worker', 'warden', 'student', 'teacher'];
 const facilityTypes = ['hostel', 'college', 'canteen'];
@@ -54,11 +55,6 @@ class CampusStore extends ChangeNotifier {
   String get myFacilityId => '${user['facilityId'] ?? ''}';
   String get room => '${user['room'] ?? ''}';
 
-  final String _apiKey = const String.fromEnvironment('FIREBASE_API_KEY');
-  final String _appId = const String.fromEnvironment('FIREBASE_APP_ID');
-  final String _sender =
-      const String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID');
-  final String _project = const String.fromEnvironment('FIREBASE_PROJECT_ID');
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection('users');
@@ -67,25 +63,15 @@ class CampusStore extends ChangeNotifier {
 
   /// Production-only. No fabricated levels or role-switch login.
   Future<void> initialize() async {
-    cloud = _apiKey.isNotEmpty && _appId.isNotEmpty &&
-        _sender.isNotEmpty && _project == aquacampusFirebaseProjectId &&
-        _appId.contains(':android:');
-    if (!cloud) {
-      message = 'This Android app needs an Android Firebase config for '
-          'aquacampus-ed284. '
-          'Ask the administrator for the official connected Android APK.';
+    if (AquaCampusFirebaseConfig.projectId != aquacampusFirebaseProjectId) {
+      message = 'Firebase project configuration mismatch.';
       loading = false;
       notifyListeners();
       return;
     }
     try {
-      await Firebase.initializeApp(options: FirebaseOptions(
-        apiKey: _apiKey,
-        appId: _appId,
-        messagingSenderId: _sender,
-        projectId: _project,
-        authDomain: const String.fromEnvironment('FIREBASE_AUTH_DOMAIN'),
-      ));
+      await Firebase.initializeApp(options: AquaCampusFirebaseConfig.options);
+      cloud = true;
       FirebaseFirestore.instance.settings =
           const Settings(persistenceEnabled: false);
       _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
