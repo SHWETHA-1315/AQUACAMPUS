@@ -35,6 +35,7 @@ class CampusStore extends ChangeNotifier {
   List<Map<String, dynamic>> sos = [];
   List<Map<String, dynamic>> people = [];
   List<Map<String, dynamic>> dailyUsage = [];
+  List<Map<String, dynamic>> tankReadings = [];
   SharedPreferences? _prefs;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   StreamSubscription<User?>? _authSubscription;
@@ -195,6 +196,7 @@ class CampusStore extends ChangeNotifier {
       requests = [];
       sos = [];
       dailyUsage = [];
+      tankReadings = [];
       notices = [
         {
           'id': 'welcome',
@@ -223,6 +225,7 @@ class CampusStore extends ChangeNotifier {
       sos = read('sos');
       people = read('people');
       dailyUsage = read('dailyUsage');
+      tankReadings = read('tankReadings');
       user = Map<String, dynamic>.from(data['user'] as Map? ?? {});
       signedIn = data['signedIn'] == true;
       _counter = (data['counter'] as num?)?.toInt() ?? 0;
@@ -245,6 +248,7 @@ class CampusStore extends ChangeNotifier {
           'sos': sos,
           'people': people,
           'dailyUsage': dailyUsage,
+          'tankReadings': tankReadings,
           'user': user,
           'signedIn': signedIn,
           'counter': _counter,
@@ -384,6 +388,7 @@ class CampusStore extends ChangeNotifier {
       sos = [];
       people = [];
       dailyUsage = [];
+      tankReadings = [];
       notifyListeners();
       return;
     }
@@ -435,6 +440,7 @@ class CampusStore extends ChangeNotifier {
         sos = [];
         people = [];
         dailyUsage = [];
+      tankReadings = [];
         notifyListeners();
       }
     }, onError: (Object e) {
@@ -471,7 +477,10 @@ class CampusStore extends ChangeNotifier {
           _col('requests').where('facilityId', isEqualTo: myFacilityId);
     }
     _watch('requests', (v) => requests = v, requestQuery);
-    if (isStaff) _watch('sos', (v) => sos = v);
+    if (isStaff) {
+      _watch('sos', (v) => sos = v);
+      _watch('tankReadings', (v) => tankReadings = v);
+    }
     if (isAdmin) {
       _subscriptions.add(_users
           .where('campusId', isEqualTo: campusId)
@@ -487,13 +496,29 @@ class CampusStore extends ChangeNotifier {
     }
   }
 
+  double lowWaterThreshold(Map<String, dynamic> f) =>
+      f['lowWaterThresholdLitres'] == null ? 500
+      : nval(f['lowWaterThresholdLitres']).toDouble().clamp(0.0, 100000000.0);
+
+  double essentialRate(Map<String, dynamic> f) =>
+      f['essentialLitresPerResident'] == null ? 30
+      : nval(f['essentialLitresPerResident']).toDouble().clamp(1.0, 1000.0);
+
+  List<Map<String, dynamic>> readingHistory(String tankId) {
+    final items = tankReadings.where((r) => r['tankId'] == tankId).toList();
+    items.sort((a, b) => '${b['measuredAt'] ?? ''}'.compareTo('${a['measuredAt'] ?? ''}'));
+    return items;
+  }
+
   Future<void> addFacility(
       {required String name,
       required String type,
       required int occupants,
       required int floors,
       required int restrooms,
-      required double dailyCapLitres}) async {
+      required double dailyCapLitres,
+      double lowWaterThresholdLitres = 500,
+      double essentialLitresPerResident = 30}) async {
     if (!isAdmin) throw StateError('Admin access required');
     final item = {
       'name': name.trim(),
@@ -502,12 +527,52 @@ class CampusStore extends ChangeNotifier {
       'floors': floors,
       'restrooms': restrooms,
       'dailyCapLitres': dailyCapLitres,
+      'lowWaterThresholdLitres': lowWaterThresholdLitres,
+      'essentialLitresPerResident': essentialLitresPerResident,
       'createdAt': timestamp()
     };
     if (cloud) {
       await _col('facilities').add(item);
     } else {
       facilities.add({...item, 'id': _newId()});
+      _persist();
+    }
+  }
+
+  Future<void> updateFacility(
+    String id, {
+    required String name,
+    required int occupants,
+    required int floors,
+    required int restrooms,
+    required double dailyCapLitres,
+    required double lowWaterThresholdLitres,
+    required double essentialLitresPerResident,
+  }) async {
+    if (!isAdmin) throw StateError('Admin access required');
+    if (facility(id) == null) throw StateError('Facility not found');
+    if (name.trim().isEmpty || floors < 1 || restrooms < 0 ||
+        occupants < 0 || !dailyCapLitres.isFinite || dailyCapLitres < 0 ||
+        !lowWaterThresholdLitres.isFinite || lowWaterThresholdLitres < 0 ||
+        !essentialLitresPerResident.isFinite ||
+        essentialLitresPerResident < 1 || essentialLitresPerResident > 1000) {
+      throw StateError('Invalid facility settings');
+    }
+    final changes = <String, dynamic>{
+      'name': name.trim(),
+      'occupants': occupants,
+      'floors': floors,
+      'restrooms': restrooms,
+      'dailyCapLitres': dailyCapLitres,
+      'lowWaterThresholdLitres': lowWaterThresholdLitres,
+      'essentialLitresPerResident': essentialLitresPerResident,
+      'updatedBy': uid,
+      'updatedAt': timestamp(),
+    };
+    if (cloud) {
+      await _col('facilities').doc(id).update(changes);
+    } else {
+      facility(id)!.addAll(changes);
       _persist();
     }
   }
@@ -542,23 +607,35 @@ class CampusStore extends ChangeNotifier {
   }
 
   Future<void> recordReading(String tankId, double waterHeightCm) async {
-    if (!isStaff) {
-      throw StateError('Only water workers and admins can record water levels');
-    }
+    if (!isStaff) throw StateError('Worker/admin access required');
     final tank = tanks.firstWhere((t) => t['id'] == tankId);
     final height = nval(tank['heightCm']).toDouble();
-    if (waterHeightCm < 0 || waterHeightCm > height) {
-      throw StateError('Level must be between 0 and $height cm');
+    if (!waterHeightCm.isFinite || waterHeightCm < 0 ||
+        height <= 0 || waterHeightCm > height) {
+      throw StateError('Water height must be within tank dimensions');
     }
-    final values = {
+    final now = timestamp();
+    final values = <String, dynamic>{
       'waterHeightCm': waterHeightCm,
-      'lastMeasuredAt': timestamp(),
-      'updatedBy': uid
+      'lastMeasuredAt': now,
+      'updatedBy': uid,
+    };
+    final history = <String, dynamic>{
+      'tankId': tankId,
+      'facilityId': tank['facilityId'],
+      'waterHeightCm': waterHeightCm,
+      'estimatedLitres': tankAvailable({...tank, ...values}),
+      'measuredAt': now,
+      'recordedBy': uid,
     };
     if (cloud) {
-      await _col('tanks').doc(tankId).update(values);
+      final batch = _firestore.batch();
+      batch.update(_col('tanks').doc(tankId), values);
+      batch.set(_col('tankReadings').doc(), history);
+      await batch.commit();
     } else {
       tank.addAll(values);
+      tankReadings.add({...history, 'id': _newId()});
       _persist();
     }
   }
