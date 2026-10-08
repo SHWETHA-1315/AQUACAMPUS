@@ -65,6 +65,7 @@ test.beforeEach(async () => {
     await setDoc(doc(db, path('facilities','canteen-1')),facility('canteen'));
     await setDoc(doc(db, path('tanks','tank-1')),tank());
     await setDoc(doc(db,path('requests','request-1')),waterRequest());
+    await setDoc(doc(db,path('requests','second-request')),waterRequest('second'));
   });
 });
 test('anonymous and unapproved accounts cannot read campus records', async () => {
@@ -87,6 +88,9 @@ test('students cannot grant themselves privileges or see other private requests'
   const db=context('student','student@campus.test');
   await assertFails(updateDoc(doc(db,'users','student'),{approved:true,role:'admin'}));
   await assertFails(getDoc(doc(db,path('requests','second-request'))));
+  await assertSucceeds(getDocs(query(collection(db,path('requests','placeholder').replace('/placeholder','')),
+    where('requestedBy','==','student'))));
+  await assertFails(getDocs(collection(db,'campuses/main/requests')));
 });
 test('admin alone can edit facilities but cannot change original type',async()=>{
   const db=context('admin','admin@campus.test');
@@ -133,6 +137,12 @@ test('warden requests limited to own hostel',async()=>{
   await assertSucceeds(getDoc(doc(db,path('requests','request-1'))));
   await assertFails(setDoc(doc(db,path('requests','canteen-attempt')),
     {...waterRequest('warden'),facilityId:'canteen-1'}));
+});
+test('warden sees only their assigned hostel requests by facility query',async()=>{
+  const db=context('warden','warden@campus.test');
+  await assertSucceeds(getDocs(query(collection(db,'campuses/main/requests'),
+    where('facilityId','==','hostel-1'))));
+  await assertFails(getDocs(collection(db,'campuses/main/requests')));
 });
 test('canteen daily usage cap cannot be bypassed',async()=>{
   const db=context('worker','worker@campus.test');
