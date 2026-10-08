@@ -829,8 +829,13 @@ class OverviewPage extends StatelessWidget {
             return Wrap(spacing: 9, runSpacing: 9, children: [
               SizedBox(
                   width: item,
-                  child: MetricBox('Estimated stored water', litres(available),
-                      Icons.water_drop)),
+                  child: MetricBox(
+                    'Measured tank estimate',
+                    s.visibleTanks.any((t) =>
+                        '${t['lastMeasuredAt'] ?? ''}'.isNotEmpty)
+                        ? litres(available) : 'Awaiting input',
+                    Icons.water_drop,
+                  )),
               SizedBox(
                   width: item,
                   child: MetricBox(
@@ -1044,6 +1049,21 @@ class PlannerPage extends StatelessWidget {
         .fold<double>(
             0, (sum, r) => sum + nval(r['quantityLitres']).toDouble());
     final residents = f['type'] == 'hostel' ? nval(f['occupants']).toInt() : 0;
+    final hasRecordedLevel = store.tanks.any((tank) =>
+        tank['facilityId'] == id &&
+        '${tank['lastMeasuredAt'] ?? ''}'.isNotEmpty);
+    if (!hasRecordedLevel) {
+      return Surface(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${f['name']}',
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+          const SizedBox(height: 9),
+          const Text('No measured tank level. Ask your water worker to record a reading before using the shortage forecast.',
+            style: TextStyle(color: Colors.black54)),
+        ],
+      ));
+    }
     final available = store.availableFor(id);
     final essentialRate = store.essentialRate(f);
     final budget = WaterBudget.estimate(
@@ -1496,6 +1516,7 @@ class TanksPage extends StatelessWidget {
                             tooltip: 'Update water height')
                     ]),
                     const SizedBox(height: 12),
+                    if ('${t['lastMeasuredAt'] ?? ''}'.isNotEmpty)
                     ClipRRect(
                         borderRadius: BorderRadius.circular(10),
                         child: LinearProgressIndicator(
@@ -1509,11 +1530,16 @@ class TanksPage extends StatelessWidget {
                             backgroundColor: const Color(0xFFE5F1EB),
                             color: const Color(0xFF18AD99))),
                     _labelValue(
-                        'Estimated water now', litres(store.tankAvailable(t))),
+                        'Estimated water from reading',
+                        '${t['lastMeasuredAt'] ?? ''}'.isEmpty
+                            ? 'Awaiting manual measurement'
+                            : litres(store.tankAvailable(t))),
                     _labelValue(
                         'Tank maximum capacity', litres(store.tankCapacity(t))),
                     _labelValue('Manual water-height reading',
-                        '${formatter.format(nval(t['waterHeightCm']))} / ${formatter.format(nval(t['heightCm']))} cm'),
+                        '${t['lastMeasuredAt'] ?? ''}'.isEmpty
+                            ? 'Not recorded'
+                            : '${formatter.format(nval(t['waterHeightCm']))} / ${formatter.format(nval(t['heightCm']))} cm'),
                     _labelValue(
                         'Shape',
                         t['shape'] == 'cylinder'
@@ -1538,7 +1564,7 @@ class TanksPage extends StatelessWidget {
           ]);
   Future<void> _addReading(
       BuildContext context, Map<String, dynamic> tank) async {
-    final height = TextEditingController(text: '${tank['waterHeightCm']}');
+    final height = TextEditingController();
     await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
