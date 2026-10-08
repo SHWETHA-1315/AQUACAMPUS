@@ -32,3 +32,9 @@ firebase-debug.*.log
 
 # Local Firebase Android client config (download from aquacampus-ed284)
 android/app/google-services.json
+
+node_modules/
+__pycache__/
+*.pyc
+*.log
+.firebase/
