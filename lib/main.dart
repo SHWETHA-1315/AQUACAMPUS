@@ -616,39 +616,42 @@ class _AppShellState extends State<AppShell> {
 }
 
 class ScreenBody extends StatelessWidget {
-  const ScreenBody(
-      {super.key,
-      required this.title,
-      required this.subtitle,
-      required this.children,
-      this.action});
+  const ScreenBody({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.children,
+    this.action,
+  });
+
   final String title, subtitle;
   final List<Widget> children;
   final Widget? action;
+
   @override
-  Widget build(BuildContext context) =>
-      ListView(padding: const EdgeInsets.all(17), children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                        color: ink,
-                        letterSpacing: -.5)),
-                const SizedBox(height: 4),
-                Text(subtitle,
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.black54, height: 1.5)),
-              ])),
-          if (action != null) action!
+  Widget build(BuildContext context) => Container(
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        colors: [Color(0xFFEDF9FF), Colors.white, Color(0xFFF4FBFF)],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      ),
+    ),
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 30),
+      children: [
+        Row(children: [
+          Expanded(child: OceanHero(title: title, subtitle: subtitle, compact: true)),
+          if (action != null) ...[
+            const SizedBox(width: 9),
+            action!,
+          ],
         ]),
-        const SizedBox(height: 18),
+        const SizedBox(height: 21),
         ...children,
-      ]);
+      ],
+    ),
+  );
 }
 
 class Surface extends StatelessWidget {
@@ -811,12 +814,6 @@ class OverviewPage extends StatelessWidget {
         subtitle:
             '${_nice(s.role)} · Campus water management',
         children: [
-          OceanHero(
-            title: 'Hello, ${s.name.split(' ').first}',
-            subtitle: 'One campus. All your water operations.',
-            compact: true,
-          ),
-          const SizedBox(height: 14),
           if (!s.backendConnected)
             const InfoBanner(
               'Waiting for a fresh campus database connection. Edits are disabled until Firebase responds.',
