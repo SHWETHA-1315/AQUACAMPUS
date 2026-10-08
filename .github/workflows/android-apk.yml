@@ -1,0 +1,40 @@
+name: Build AQUACAMPUS Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Flutter app source
+        uses: actions/checkout@v4
+      - name: Install Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Android platform if missing
+        run: |
+          if [ ! -d android ]; then
+            flutter create --project-name aquacampus --platforms android .
+          fi
+      - name: Fetch dependencies
+        run: flutter pub get
+      - name: Analyze Dart code
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Unit tests
+        run: flutter test
+      - name: Compile installable release APK
+        run: flutter build apk --release
+      - name: Save APK to Actions artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AQUACAMPUS-Android-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14

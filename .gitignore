@@ -1,0 +1,18 @@
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+build/
+coverage/
+android/.gradle/
+android/local.properties
+*.keystore
+*.jks
+.env
+firebase-admin*.json
+*.pem
+
+# Native build outputs
+release/
+android/key.properties

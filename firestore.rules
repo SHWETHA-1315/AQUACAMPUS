@@ -1,0 +1,158 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function myUser() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function registered() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function active() { return registered() && myUser().data.approved == true && myUser().data.campusId == 'main'; }
+    function role() { return myUser().data.role; }
+    function isAdmin() { return active() && role() == 'admin'; }
+    function isWorker() { return active() && role() == 'worker'; }
+    function isStaff() { return isAdmin() || isWorker(); }
+    function myFacility() { return myUser().data.facilityId; }
+    function facilityPath(campus, fid) { return /databases/$(database)/documents/campuses/$(campus)/facilities/$(fid); }
+    function facilityExists(campus, fid) { return exists(facilityPath(campus, fid)); }
+    function facilityType(campus, fid) { return get(facilityPath(campus, fid)).data.type; }
+    function canUseFacility(campus, fid) {
+      return active() && facilityExists(campus, fid) && (
+        isStaff() ||
+        (role() in ['student', 'warden'] && myFacility() == fid) ||
+        (role() == 'teacher' && facilityType(campus, fid) in ['college', 'canteen'])
+      );
+    }
+
+    // A student may report an academic building/canteen emergency even when
+    // their assigned residence is a hostel; this does NOT give incident-feed access.
+    function canReportSOS(campus, fid) {
+      return canUseFacility(campus, fid) ||
+        (active() && role() == 'student' && facilityExists(campus, fid) &&
+          facilityType(campus, fid) in ['college', 'canteen']);
+    }
+
+    match /users/{userId} {
+      allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      // Members cannot elevate privileges by setting their own role or approval.
+      allow create: if signedIn() && request.auth.uid == userId &&
+        request.resource.data.keys().hasAll(['name','email','role','facilityId','room','approved','campusId','createdAt']) &&
+        request.resource.data.role == 'student' &&
+        request.resource.data.approved == false &&
+        request.resource.data.facilityId == '' &&
+        request.resource.data.room == '' &&
+        request.resource.data.campusId == 'main' &&
+        request.resource.data.email == request.auth.token.email;
+      allow update: if isAdmin() &&
+        resource.data.campusId == 'main' &&
+        request.resource.data.campusId == resource.data.campusId &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.role in ['admin','worker','warden','student','teacher'];
+      allow delete: if false;
+    }
+
+    match /campuses/{campus} {
+      allow read, write: if isAdmin() && campus == 'main';
+
+      match /facilities/{fid} {
+        allow read: if active() && campus == 'main';
+        allow create, update: if isAdmin() && campus == 'main' &&
+          request.resource.data.type in ['hostel','college','canteen'] &&
+          request.resource.data.dailyCapLitres is number && request.resource.data.dailyCapLitres >= 0 &&
+          request.resource.data.floors is int && request.resource.data.floors >= 1 &&
+          request.resource.data.restrooms is int && request.resource.data.restrooms >= 0;
+        allow delete: if false;
+      }
+
+      match /tanks/{tankId} {
+        allow read: if active() && campus == 'main';
+        allow create: if isAdmin() && campus == 'main' &&
+          facilityExists(campus, request.resource.data.facilityId) &&
+          request.resource.data.shape in ['rect','cylinder'] &&
+          request.resource.data.heightCm is number && request.resource.data.heightCm > 0 &&
+          request.resource.data.waterHeightCm == 0;
+        allow update: if isAdmin() || (isWorker() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['waterHeightCm','lastMeasuredAt','updatedBy']) &&
+          request.resource.data.waterHeightCm is number &&
+          request.resource.data.waterHeightCm >= 0 &&
+          request.resource.data.waterHeightCm <= resource.data.heightCm &&
+          request.resource.data.updatedBy == request.auth.uid);
+        allow delete: if false;
+      }
+
+      match /requests/{requestId} {
+        allow get, list: if active() && campus == 'main' && (
+          isStaff() ||
+          (role() == 'warden' && resource.data.facilityId == myFacility()) ||
+          resource.data.requestedBy == request.auth.uid
+        );
+        allow create: if campus == 'main' &&
+          canUseFacility(campus, request.resource.data.facilityId) &&
+          request.resource.data.requestedBy == request.auth.uid &&
+          request.resource.data.status == 'pending' &&
+          request.resource.data.peopleCount is int &&
+          request.resource.data.peopleCount >= 1 && request.resource.data.peopleCount <= 500 &&
+          request.resource.data.quantityLitres is number &&
+          request.resource.data.quantityLitres > 0 && request.resource.data.quantityLitres <= 500000 &&
+          request.resource.data.approvedLitres == 0;
+        // Only worker/admin can accept/reject or mark a delivery fulfilled.
+        allow update: if isStaff() && campus == 'main' &&
+          request.resource.data.requestedBy == resource.data.requestedBy &&
+          request.resource.data.facilityId == resource.data.facilityId &&
+          ((resource.data.status == 'pending' && request.resource.data.status in ['approved','rejected'] &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','approvedLitres','approvedBy','reviewedAt']) &&
+            request.resource.data.approvedBy == request.auth.uid &&
+            (request.resource.data.status == 'rejected' ||
+              (request.resource.data.approvedLitres is number &&
+                request.resource.data.approvedLitres > 0 &&
+                request.resource.data.approvedLitres <= resource.data.quantityLitres))) ||
+           (resource.data.status == 'approved' && request.resource.data.status == 'fulfilled' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','fulfilledAt','fulfilledBy']) &&
+            request.resource.data.fulfilledBy == request.auth.uid));
+        allow delete: if false;
+      }
+
+      match /dailyUsage/{usageId} {
+        allow read: if active() && campus == 'main';
+        function capped() {
+          return facilityExists(campus, request.resource.data.facilityId) &&
+            facilityType(campus, request.resource.data.facilityId) == 'canteen' &&
+            request.resource.data.usedLitres is number &&
+            request.resource.data.usedLitres >= 0 &&
+            request.resource.data.usedLitres <= get(facilityPath(campus, request.resource.data.facilityId)).data.dailyCapLitres &&
+            request.resource.data.updatedBy == request.auth.uid &&
+            usageId == request.resource.data.day + '_' + request.resource.data.facilityId;
+        }
+        allow create: if isStaff() && campus == 'main' && capped();
+        allow update: if isStaff() && campus == 'main' && capped() &&
+          request.resource.data.facilityId == resource.data.facilityId &&
+          request.resource.data.day == resource.data.day &&
+          request.resource.data.usedLitres >= resource.data.usedLitres &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedLitres','updatedBy']);
+        allow delete: if false;
+      }
+
+      match /sos/{alertId} {
+        // Even the reporter cannot read the incident feed. No student/teacher/warden leaks.
+        allow get, list: if isStaff() && campus == 'main';
+        allow create: if campus == 'main' &&
+          canReportSOS(campus, request.resource.data.facilityId) &&
+          request.resource.data.createdBy == request.auth.uid &&
+          request.resource.data.status == 'open' &&
+          request.resource.data.floor is int && request.resource.data.floor >= 0;
+        allow update: if isStaff() && campus == 'main' &&
+          resource.data.status == 'open' && request.resource.data.status == 'resolved' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','resolvedAt','resolvedBy']) &&
+          request.resource.data.resolvedBy == request.auth.uid;
+        allow delete: if false;
+      }
+
+      match /notices/{noticeId} {
+        allow read: if active() && campus == 'main';
+        allow create: if isAdmin() && campus == 'main' &&
+          request.resource.data.createdBy == request.auth.uid &&
+          request.resource.data.message is string &&
+          request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 2000;
+        allow update, delete: if false;
+      }
+    }
+  }
+}
