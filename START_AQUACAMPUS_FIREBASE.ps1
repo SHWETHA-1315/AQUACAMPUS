@@ -91,15 +91,17 @@ if ($defaultDatabase.Count -eq 0) {
   Write-Host 'Existing default Firestore database found. Reusing it.' -ForegroundColor Green
 }
 if (-not $SkipRuleDeploy) {
-  $confirmedRules = Read-Host 'Deploy Firestore access-control rules to aquacampus-ed284? Type DEPLOY'
-  if ($confirmedRules -ne 'DEPLOY') { throw 'Security rules deployment canceled.' }
-  RunFirebase -CommandArgs @('deploy','--only','firestore:rules','--project',$ProjectId) | Out-Null
-  Write-Host 'Firestore security rules deployed.' -ForegroundColor Green
+  Write-Host 'Firebase deploy will enable Email/Password sign-in and replace Firestore rules.' -ForegroundColor Yellow
+  Write-Host 'The deployment target is ONLY the existing aquacampus-ed284 project.'
+  $confirmedRules = Read-Host 'Type DEPLOY to enable Auth and deploy strict Firestore access-control rules'
+  if ($confirmedRules -ne 'DEPLOY') { throw 'Firebase backend deployment canceled.' }
+  RunFirebase -CommandArgs @('deploy','--only','auth,firestore:rules','--project',$ProjectId) | Out-Null
+  Write-Host 'Email/Password Authentication and Firestore security rules deployed.' -ForegroundColor Green
 }
 
 Write-Host ''
-Write-Host 'IMPORTANT: In Firebase Console enable Authentication > Sign-in method > Email/Password.' -ForegroundColor Yellow
+Write-Host 'Auth provider: Email/Password is declared in firebase.json and deployed together with Firestore rules.' -ForegroundColor Cyan
 Write-Host 'No fabricated accounts or user roles have been created.' -ForegroundColor Yellow
 Write-Host 'To build the Android APK run:' -ForegroundColor Cyan
 Write-Host '   .\build_apk.ps1 -LiveFirebase'
-Write-Host 'Then register your own account and grant the first Admin role via Firestore Console.'
+Write-Host 'Register your real Admin account in the app. Then use Firebase Console or BOOTSTRAP_ADMIN.ps1 to approve only that verified account.'
