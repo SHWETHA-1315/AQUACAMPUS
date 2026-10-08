@@ -16,6 +16,8 @@ PROJECT = "aquacampus-ed284"
 def main():
     parser=argparse.ArgumentParser(description="Approve the first real AQUACAMPUS Admin")
     parser.add_argument("--email", required=True, help="Email already registered in AQUACAMPUS")
+    parser.add_argument("--confirm-email", default="",
+                        help="For owner-authorized CI: explicitly repeat the chosen admin email")
     args=parser.parse_args()
     email=args.email.strip().lower()
     if not email or "@" not in email:
@@ -28,6 +30,9 @@ def main():
     try:
         app = firebase_admin.initialize_app(options={"projectId": PROJECT})
         person = auth.get_user_by_email(email, app=app)
+        if not person.email_verified:
+            sys.exit("STOP: This Firebase Authentication email has not been verified. "
+                     "Open the actual email verification link in the Android app first.")
         db = firestore.client(app=app)
         ref = db.collection("users").document(person.uid)
         snap = ref.get()
@@ -43,9 +48,25 @@ def main():
         if profile.get("role") == "admin" and profile.get("approved") is True:
             print("Already an approved admin. No writes needed.")
             return
-        typed = input(f"Type BOOTSTRAP {person.uid} to grant this verified account Admin: ").strip()
-        if typed != f"BOOTSTRAP {person.uid}":
-            sys.exit("Canceled. No role changed.")
+        # A first-admin bootstrap is only safe if there is no other approved
+        # administrator. Further admins must be assigned inside the app.
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        candidates = db.collection("users").where(
+            filter=FieldFilter("role", "==", "admin")
+        ).stream()
+        for existing in candidates:
+            if existing.id != person.uid and existing.to_dict().get("approved") is True:
+                sys.exit("STOP: Another approved Admin already exists. "
+                         "Use the existing Admin's member-management screen.")
+        if args.confirm_email:
+            if args.confirm_email.strip().lower() != email:
+                sys.exit("STOP: Confirmation email does not match. No role changed.")
+        else:
+            typed = input(
+                f"Type BOOTSTRAP {person.uid} to grant this verified account Admin: "
+            ).strip()
+            if typed != f"BOOTSTRAP {person.uid}":
+                sys.exit("Canceled. No role changed.")
         ref.update({
             "approved": True,
             "role": "admin",
