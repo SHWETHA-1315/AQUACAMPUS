@@ -1,5 +1,22 @@
 # AQUACAMPUS — Firebase backend for aquacampus-ed284
 
+## Verified backend source status (October 2026)
+
+- Firebase Android registration matched: `aquacampus-ed284` / `com.example.aquacampus`.
+- Email/Password Authentication provider is declared in `firebase.json` and is deployed by `START_AQUACAMPUS_FIREBASE.ps1` using the project owner's own Google sign-in.
+- `firestore.rules` includes role-based Admin, Worker, Warden, Student and Teacher policies; tank reading audit, requests and SOS validation.
+- A Firebase emulator GitHub Actions workflow passed **12 security rules tests**. This checks rules locally, **not** deployment in the real Firebase project.
+- **Live Firebase deployment not yet confirmed.** Authentication enablement, database existence, first Admin approval and two-Android-phone integration still need owner-authorized cloud access.
+
+### Fastest authorized deployment (Windows)
+
+Open an up-to-date local checkout (`C:\AQUACAMPUS`) and double-click `RUN_AQUACAMPUS_SETUP.cmd`. The script prompts for Google owner login, verifies the existing project, reuses the registered Android app, creates Firestore only if the default database does not exist (with confirmation of its permanent location), and deploys **both Authentication Email/Password and Firestore rules** after you type `DEPLOY`. It does **not** create fake data.
+
+After installing the APK, register the real intended Admin email through the app. Then run `./BOOTSTRAP_ADMIN.ps1 -Email real-admin@example.com` on a trusted owner computer (requires the Google Cloud CLI and owner Google login). It verifies both Auth UID and Firestore profile and explicitly asks before granting access. Alternatively, approve that account manually in the Firebase Console.
+
+Security tests: `npm install` then `npm run test:emulator`. These run on local mock identities only and never write to `aquacampus-ed284`.
+
+
 **Target Firebase project:** `aquacampus-ed284` (the user's existing project)
 
 **Android package name:** `com.example.aquacampus`
@@ -12,13 +29,13 @@
 
 Open the existing [Firebase project overview](https://console.firebase.google.com/project/aquacampus-ed284/overview).
 
-1. **Authentication → Get started → Sign-in method → Email/Password → Enable → Save.**
+1. **Authentication Email/Password:** `firebase.json` contains `auth.providers.emailPassword=true`, and the owner-authorized setup script deploys it. You can verify the provider on the Firebase Console Authentication → Sign-in method screen.
 2. **Firestore Database → Create database**. Select a nearby regional location deliberately and choose **Production mode**. Avoid public/test rules. The default database is `(default)`.
 3. **Project settings** (gear icon) → **Your apps** → **Android app**: verify the existing Android app has package `com.example.aquacampus`. Its registration has already been verified using the uploaded Firebase configuration. Don't register another app unless you deliberately change the Android package.
 4. **Firebase client config is already integrated:** `lib/firebase_android_config.dart` contains the public Android config values. The original `google-services.json` is not committed. No private service-account credentials are used. Keep the Android app package name unchanged.
 5. Run `cd C:\AQUACAMPUS` and `git pull origin main` (preserve any uncommitted local edits). Ensure Node.js is installed; run `npm install -g firebase-tools`.
 6. Run `.\SETUP_FIREBASE.ps1`. It authorizes your Google account, checks access to **aquacampus-ed284**, and lists registered Android apps. It does **not** create another project.
-7. After reviewing the Firestore rules in this repo, run `.\SETUP_FIREBASE.ps1 -DeployRules` and explicitly type `DEPLOY`. This publishes **only** `firestore.rules` to **aquacampus-ed284** using the authenticated Google account. It does not deploy a website. Confirm the deployed rules in Firestore Database → Rules. Deploying rules overwrites the existing Firestore rules in that project; review before doing this.
+7. After reviewing the security rules, run `.\START_AQUACAMPUS_FIREBASE.ps1` or `RUN_AQUACAMPUS_SETUP.cmd`, explicitly typing `DEPLOY`. This applies Email/Password Auth provider configuration **and** Firestore rules to `aquacampus-ed284`. It does not deploy any website. Confirm both in the Firebase Console. Deploying rules overwrites the existing Firestore rules in that project; review before doing this.
 8. Run `.\build_apk.ps1 -LiveFirebase`. The script uses the already integrated Firebase Android options, runs Flutter analyze/tests, and builds `release\AQUACAMPUS-FIREBASE-LIVE.apk`. Android build depends on the Flutter and Android SDKs installed on the laptop. Alternatively download the latest successful APK artifact from GitHub Actions.
 
 **Important:** An uploaded `google-services.json` is an app configuration file (not an Admin SDK credential). Never share your Google password, private service-account keys or access/refresh tokens.
