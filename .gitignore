@@ -16,3 +16,11 @@ firebase-admin*.json
 # Native build outputs
 release/
 android/key.properties
+
+# Developer machine artifacts (do not commit)
+.idea/
+*.iml
+.metadata
+AQUACAMPUS-main/
+AQUACAMPUS_ROOT_SETUP.ps1
+*.zip
