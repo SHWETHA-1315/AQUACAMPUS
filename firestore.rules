@@ -13,6 +13,17 @@ service cloud.firestore {
     function facilityPath(campus, fid) { return /databases/$(database)/documents/campuses/$(campus)/facilities/$(fid); }
     function facilityExists(campus, fid) { return exists(facilityPath(campus, fid)); }
     function facilityType(campus, fid) { return get(facilityPath(campus, fid)).data.type; }
+    function tankPath(campus, tankId) {
+      return /databases/$(database)/documents/campuses/$(campus)/tanks/$(tankId);
+    }
+    // The water estimate must match the worker's measured depth and tank
+    // dimensions. No client can invent independent "stored litres".
+    function expectedTankLitres(campus, tankId, depth) {
+      let tank = get(tankPath(campus, tankId)).data;
+      return tank.shape == 'rect' ?
+        tank.lengthCm * tank.widthCm * depth / 1000.0 :
+        3.141592653589793 * tank.diameterCm * tank.diameterCm * depth / 4000.0;
+    }
     function canUseFacility(campus, fid) {
       return active() && facilityExists(campus, fid) && (
         isStaff() ||
@@ -163,6 +174,10 @@ service cloud.firestore {
           request.resource.data.measuredAt.size() > 0 &&
           request.resource.data.estimatedLitres is number &&
           request.resource.data.estimatedLitres >= 0 &&
+          request.resource.data.estimatedLitres >=
+            expectedTankLitres(campus, request.resource.data.tankId, request.resource.data.waterHeightCm) - 0.01 &&
+          request.resource.data.estimatedLitres <=
+            expectedTankLitres(campus, request.resource.data.tankId, request.resource.data.waterHeightCm) + 0.01 &&
           exists(/databases/$(database)/documents/campuses/$(campus)/tanks/$(request.resource.data.tankId)) &&
           request.resource.data.facilityId ==
             get(/databases/$(database)/documents/campuses/$(campus)/tanks/$(request.resource.data.tankId)).data.facilityId &&
@@ -191,6 +206,10 @@ service cloud.firestore {
           request.resource.data.peopleCount >= 1 && request.resource.data.peopleCount <= 500 &&
           request.resource.data.quantityLitres is number &&
           request.resource.data.quantityLitres > 0 && request.resource.data.quantityLitres <= 500000 &&
+          request.resource.data.quantityLitres >=
+            request.resource.data.peopleCount * request.resource.data.litresPerPerson - 0.01 &&
+          request.resource.data.quantityLitres <=
+            request.resource.data.peopleCount * request.resource.data.litresPerPerson + 0.01 &&
           request.resource.data.approvedLitres == 0 &&
           request.resource.data.activity in [
             'Bathing','Laundry','Room cleaning','Cooking','Utensil washing','Other'
