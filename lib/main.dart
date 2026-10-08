@@ -442,7 +442,61 @@ class ApprovalPage extends StatelessWidget {
                 const Text(
                     'Your account was created. Campus Admin must approve you and assign your hostel, room or staff role. Role selection is NOT public in live mode.',
                     textAlign: TextAlign.center),
-                const SizedBox(height: 19),
+                const SizedBox(height: 14),
+                if (!store.emailVerified) ...[
+                  const Text(
+                    'Verify your email using the Firebase link we sent. '
+                    'A real campus administrator must then approve your role.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      try {
+                        await store.resendEmailVerification();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text(
+                            'Verification email sent. Check your inbox.')),
+                        );
+                      } catch (error) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('$error')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.mark_email_unread_outlined),
+                    label: const Text('Resend verification email'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      try {
+                        final verified = await store.refreshEmailVerification();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(verified
+                            ? 'Email verified. Await campus admin approval.'
+                            : 'Email not verified yet. Open your verification link.'),
+                        ));
+                      } catch (error) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('$error')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('I verified my email · Refresh'),
+                  ),
+                ] else
+                  const Text(
+                    'Email verified. Awaiting the campus administrator.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: sea, fontWeight: FontWeight.w600),
+                  ),
+                const SizedBox(height: 12),
                 OutlinedButton.icon(
                     onPressed: store.logout,
                     icon: const Icon(Icons.logout),
