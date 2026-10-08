@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'water_math.dart';
 
@@ -36,12 +34,10 @@ class CampusStore extends ChangeNotifier {
   List<Map<String, dynamic>> people = [];
   List<Map<String, dynamic>> dailyUsage = [];
   List<Map<String, dynamic>> tankReadings = [];
-  SharedPreferences? _prefs;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
       _profileSubscription;
-  int _counter = 0;
 
   String get role => '${user['role'] ?? 'student'}';
   String get name => '${user['name'] ?? 'Campus member'}';
@@ -61,202 +57,56 @@ class CampusStore extends ChangeNotifier {
   final String _sender =
       const String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID');
   final String _project = const String.fromEnvironment('FIREBASE_PROJECT_ID');
-  String get _memoryKey => 'aquacampus_offline_v2';
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection('users');
   CollectionReference<Map<String, dynamic>> _col(String key) =>
       _firestore.collection('campuses').doc(campusId).collection(key);
 
+  /// Production-only. No fabricated levels or role-switch login.
   Future<void> initialize() async {
+    cloud = _apiKey.isNotEmpty && _appId.isNotEmpty &&
+        _sender.isNotEmpty && _project.isNotEmpty;
+    if (!cloud) {
+      message = 'This AQUACAMPUS build needs campus Firebase configuration. '
+          'Ask the administrator for the official connected Android APK.';
+      loading = false;
+      notifyListeners();
+      return;
+    }
     try {
-      _prefs = await SharedPreferences.getInstance();
-      cloud = _apiKey.isNotEmpty &&
-          _appId.isNotEmpty &&
-          _sender.isNotEmpty &&
-          _project.isNotEmpty;
-      if (cloud) {
-        await Firebase.initializeApp(
-            options: FirebaseOptions(
-          apiKey: _apiKey,
-          appId: _appId,
-          messagingSenderId: _sender,
-          projectId: _project,
-          authDomain: const String.fromEnvironment('FIREBASE_AUTH_DOMAIN'),
-        ));
-        _authSubscription = FirebaseAuth.instance
-            .authStateChanges()
-            .listen(_onAuth, onError: (Object e) {
-          message = 'Login service error: $e';
+      await Firebase.initializeApp(options: FirebaseOptions(
+        apiKey: _apiKey,
+        appId: _appId,
+        messagingSenderId: _sender,
+        projectId: _project,
+        authDomain: const String.fromEnvironment('FIREBASE_AUTH_DOMAIN'),
+      ));
+      FirebaseFirestore.instance.settings =
+          const Settings(persistenceEnabled: false);
+      _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
+        _onAuth,
+        onError: (Object error) {
+          message = 'Login service error: $error';
           notifyListeners();
-        });
-      } else {
-        _loadOffline();
-      }
-    } catch (e) {
-      message = 'Startup error: $e';
+        },
+      );
+    } catch (error) {
+      message = 'Firebase connection failed: $error';
       cloud = false;
-      _loadOffline();
     }
     loading = false;
     notifyListeners();
   }
 
-  void _loadOffline() {
-    final saved = _prefs?.getString(_memoryKey);
-    if (saved == null) {
-      facilities = [
-        {
-          'id': 'hostel-a',
-          'type': 'hostel',
-          'name': 'Hostel A',
-          'occupants': 100,
-          'floors': 3,
-          'restrooms': 12,
-          'dailyCapLitres': 0
-        },
-        {
-          'id': 'hostel-b',
-          'type': 'hostel',
-          'name': 'Hostel B',
-          'occupants': 80,
-          'floors': 3,
-          'restrooms': 9,
-          'dailyCapLitres': 0
-        },
-        {
-          'id': 'college-1',
-          'type': 'college',
-          'name': 'Academic Block',
-          'occupants': 450,
-          'floors': 4,
-          'restrooms': 16,
-          'dailyCapLitres': 0
-        },
-        {
-          'id': 'canteen-1',
-          'type': 'canteen',
-          'name': 'Main Canteen',
-          'occupants': 0,
-          'floors': 1,
-          'restrooms': 2,
-          'dailyCapLitres': 500
-        },
-      ];
-      tanks = [
-        {
-          'id': 'tank-1',
-          'name': 'Hostel A overhead',
-          'facilityId': 'hostel-a',
-          'shape': 'rect',
-          'lengthCm': 200,
-          'widthCm': 150,
-          'heightCm': 200,
-          'diameterCm': 0,
-          'waterHeightCm': 70,
-          'lastMeasuredAt': timestamp()
-        },
-        {
-          'id': 'tank-2',
-          'name': 'Hostel B tank',
-          'facilityId': 'hostel-b',
-          'shape': 'cylinder',
-          'lengthCm': 0,
-          'widthCm': 0,
-          'heightCm': 200,
-          'diameterCm': 150,
-          'waterHeightCm': 80,
-          'lastMeasuredAt': timestamp()
-        },
-        {
-          'id': 'tank-3',
-          'name': 'Academic tank',
-          'facilityId': 'college-1',
-          'shape': 'rect',
-          'lengthCm': 200,
-          'widthCm': 200,
-          'heightCm': 200,
-          'diameterCm': 0,
-          'waterHeightCm': 100,
-          'lastMeasuredAt': timestamp()
-        },
-        {
-          'id': 'tank-4',
-          'name': 'Canteen tank',
-          'facilityId': 'canteen-1',
-          'shape': 'rect',
-          'lengthCm': 100,
-          'widthCm': 100,
-          'heightCm': 100,
-          'diameterCm': 0,
-          'waterHeightCm': 50,
-          'lastMeasuredAt': timestamp()
-        },
-      ];
-      requests = [];
-      sos = [];
-      dailyUsage = [];
-      tankReadings = [];
-      notices = [
-        {
-          'id': 'welcome',
-          'message':
-              'Welcome to AQUACAMPUS. Tank volumes are estimates based on manual measurements.',
-          'targetFacilityId': '',
-          'createdAt': timestamp(),
-          'createdBy': 'system'
-        }
-      ];
-      people = [];
-      user = {};
-      signedIn = false;
-      _persist();
-      return;
-    }
-    try {
-      final data = jsonDecode(saved) as Map<String, dynamic>;
-      List<Map<String, dynamic>> read(String key) => (data[key] as List? ?? [])
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-      facilities = read('facilities');
-      tanks = read('tanks');
-      requests = read('requests');
-      notices = read('notices');
-      sos = read('sos');
-      people = read('people');
-      dailyUsage = read('dailyUsage');
-      tankReadings = read('tankReadings');
-      user = Map<String, dynamic>.from(data['user'] as Map? ?? {});
-      signedIn = data['signedIn'] == true;
-      _counter = (data['counter'] as num?)?.toInt() ?? 0;
-    } catch (e) {
-      message = 'Offline storage could not be loaded: $e';
-      user = {};
-      signedIn = false;
+  /// Server snapshots, not device cache, are required for editing.
+  bool backendConnected = false;
+  void _ensureLive() {
+    if (!cloud || !backendConnected) {
+      throw StateError('Live water database is unavailable. Nothing saved.');
     }
   }
 
-  void _persist() {
-    if (cloud) return;
-    _prefs?.setString(
-        _memoryKey,
-        jsonEncode({
-          'facilities': facilities,
-          'tanks': tanks,
-          'requests': requests,
-          'notices': notices,
-          'sos': sos,
-          'people': people,
-          'dailyUsage': dailyUsage,
-          'tankReadings': tankReadings,
-          'user': user,
-          'signedIn': signedIn,
-          'counter': _counter,
-        }));
-    notifyListeners();
-  }
-
-  String _newId() => '${DateTime.now().microsecondsSinceEpoch}-${++_counter}';
   Map<String, dynamic>? facility(String id) {
     for (final item in facilities) {
       if (item['id'] == id) return item;
@@ -317,31 +167,9 @@ class CampusStore extends ChangeNotifier {
       .where((u) => u['facilityId'] == facilityId && u['day'] == dateKey())
       .fold(0.0, (a, u) => a + nval(u['usedLitres']).toDouble());
 
-  void loginOffline(String selectedRole, String displayName,
-      {String facilityId = 'hostel-a', String room = '101'}) {
-    user = {
-      'id': 'demo-$selectedRole',
-      'name': displayName.trim().isEmpty
-          ? 'Demo ${selectedRole.toUpperCase()}'
-          : displayName.trim(),
-      'role': selectedRole,
-      'facilityId': facilityId,
-      'room': room,
-      'approved': true,
-      'campusId': campusId
-    };
-    signedIn = true;
-    _persist();
-  }
-
   Future<void> logout() async {
-    if (cloud) {
-      await FirebaseAuth.instance.signOut();
-    } else {
-      user = {};
-      signedIn = false;
-      _persist();
-    }
+    if (!cloud) return;
+    await FirebaseAuth.instance.signOut();
   }
 
   Future<void> emailLogin(String email, String password,
@@ -389,6 +217,7 @@ class CampusStore extends ChangeNotifier {
       people = [];
       dailyUsage = [];
       tankReadings = [];
+      backendConnected = false;
       notifyListeners();
       return;
     }
@@ -427,6 +256,7 @@ class CampusStore extends ChangeNotifier {
           s.cancel();
         }
         _subscriptions.clear();
+        backendConnected = false;
         _subscribeCloud();
       } else if (!approved) {
         for (final s in _subscriptions) {
@@ -453,11 +283,15 @@ class CampusStore extends ChangeNotifier {
       String collection, void Function(List<Map<String, dynamic>>) handle,
       [Query<Map<String, dynamic>>? query]) {
     final source = query ?? _col(collection);
-    _subscriptions.add(source.snapshots().listen((snapshot) {
+    _subscriptions.add(source.snapshots(includeMetadataChanges: true).listen((snapshot) {
+      if (collection == 'facilities') {
+        backendConnected = !snapshot.metadata.isFromCache;
+      }
       handle(
           snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList());
       notifyListeners();
     }, onError: (Object e) {
+      if (collection == 'facilities') backendConnected = false;
       message = '$collection sync failed: $e';
       notifyListeners();
     }));
@@ -531,12 +365,10 @@ class CampusStore extends ChangeNotifier {
       'essentialLitresPerResident': essentialLitresPerResident,
       'createdAt': timestamp()
     };
-    if (cloud) {
+    _ensureLive();
+
       await _col('facilities').add(item);
-    } else {
-      facilities.add({...item, 'id': _newId()});
-      _persist();
-    }
+    
   }
 
   Future<void> updateFacility(
@@ -569,12 +401,10 @@ class CampusStore extends ChangeNotifier {
       'updatedBy': uid,
       'updatedAt': timestamp(),
     };
-    if (cloud) {
+    _ensureLive();
+
       await _col('facilities').doc(id).update(changes);
-    } else {
-      facility(id)!.addAll(changes);
-      _persist();
-    }
+    
   }
 
   Future<void> addTank(
@@ -598,12 +428,10 @@ class CampusStore extends ChangeNotifier {
       'lastMeasuredAt': '',
       'createdAt': timestamp()
     };
-    if (cloud) {
+    _ensureLive();
+
       await _col('tanks').add(item);
-    } else {
-      tanks.add({...item, 'id': _newId()});
-      _persist();
-    }
+    
   }
 
   Future<void> recordReading(String tankId, double waterHeightCm) async {
@@ -628,16 +456,13 @@ class CampusStore extends ChangeNotifier {
       'measuredAt': now,
       'recordedBy': uid,
     };
-    if (cloud) {
+    _ensureLive();
+
       final batch = _firestore.batch();
       batch.update(_col('tanks').doc(tankId), values);
       batch.set(_col('tankReadings').doc(), history);
       await batch.commit();
-    } else {
-      tank.addAll(values);
-      tankReadings.add({...history, 'id': _newId()});
-      _persist();
-    }
+    
   }
 
   Future<void> addRequest(
@@ -672,12 +497,10 @@ class CampusStore extends ChangeNotifier {
       'fulfilledBy': '',
       'fulfilledAt': ''
     };
-    if (cloud) {
+    _ensureLive();
+
       await _col('requests').add(data);
-    } else {
-      requests.add({...data, 'id': _newId()});
-      _persist();
-    }
+    
   }
 
   Future<void> decideRequest(String id,
@@ -698,17 +521,16 @@ class CampusStore extends ChangeNotifier {
       'approvedBy': uid,
       'reviewedAt': timestamp()
     };
-    if (cloud) {
+    _ensureLive();
+
       await _col('requests').doc(id).update(values);
-    } else {
-      request.addAll(values);
-      _persist();
-    }
+    
   }
 
   Future<void> fulfillRequest(String id) async {
     if (!isStaff) throw StateError('Worker or admin access required');
-    if (cloud) {
+    _ensureLive();
+
       final reqRef = _col('requests').doc(id);
       await _firestore.runTransaction((tx) async {
         final reqDoc = await tx.get(reqRef);
@@ -750,42 +572,7 @@ class CampusStore extends ChangeNotifier {
           'fulfilledBy': uid
         });
       });
-    } else {
-      final r = requests.firstWhere((item) => item['id'] == id);
-      if (r['status'] != 'approved') {
-        throw StateError('Only approved requests can be supplied');
-      }
-      final amount = nval(r['approvedLitres']).toDouble();
-      final facilityId = '${r['facilityId']}';
-      final fac = facility(facilityId);
-      if (fac?['type'] == 'canteen') {
-        final cap = nval(fac?['dailyCapLitres']).toDouble();
-        if (cap <= 0 || dailyUsed(facilityId) + amount > cap + 0.0001) {
-          throw StateError('Canteen daily supply limit exceeded ($cap L)');
-        }
-        final day = dateKey();
-        final existing = dailyUsage
-            .where((u) => u['facilityId'] == facilityId && u['day'] == day)
-            .toList();
-        if (existing.isEmpty) {
-          dailyUsage.add({
-            'id': '${day}_$facilityId',
-            'facilityId': facilityId,
-            'day': day,
-            'usedLitres': amount
-          });
-        } else {
-          existing.first['usedLitres'] =
-              nval(existing.first['usedLitres']).toDouble() + amount;
-        }
-      }
-      r.addAll({
-        'status': 'fulfilled',
-        'fulfilledAt': timestamp(),
-        'fulfilledBy': uid
-      });
-      _persist();
-    }
+    
   }
 
   Future<void> createSOS(
@@ -805,12 +592,10 @@ class CampusStore extends ChangeNotifier {
       'createdAt': timestamp(),
       'resolvedAt': ''
     };
-    if (cloud) {
+    _ensureLive();
+
       await _col('sos').add(data);
-    } else {
-      sos.add({...data, 'id': _newId()});
-      _persist();
-    }
+    
   }
 
   Future<void> closeSOS(String id) async {
@@ -820,12 +605,10 @@ class CampusStore extends ChangeNotifier {
       'resolvedAt': timestamp(),
       'resolvedBy': uid
     };
-    if (cloud) {
+    _ensureLive();
+
       await _col('sos').doc(id).update(values);
-    } else {
-      sos.firstWhere((a) => a['id'] == id).addAll(values);
-      _persist();
-    }
+    
   }
 
   Future<void> postNotice(String targetFacilityId, String text) async {
@@ -837,12 +620,10 @@ class CampusStore extends ChangeNotifier {
       'createdBy': uid,
       'createdAt': timestamp()
     };
-    if (cloud) {
+    _ensureLive();
+
       await _col('notices').add(item);
-    } else {
-      notices.add({...item, 'id': _newId()});
-      _persist();
-    }
+    
   }
 
   Future<void> changeMember(String memberId,
@@ -857,13 +638,10 @@ class CampusStore extends ChangeNotifier {
       'facilityId': facilityId,
       'room': room
     };
-    if (cloud) {
+    _ensureLive();
+
       await _users.doc(memberId).update(values);
-    } else {
-      final member = people.firstWhere((u) => u['id'] == memberId);
-      member.addAll(values);
-      _persist();
-    }
+    
   }
 
   void clearMessage() {
