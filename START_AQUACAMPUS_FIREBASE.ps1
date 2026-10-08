@@ -33,7 +33,7 @@ Write-Host 'A Google login window may open. Authorize the Firebase project owner
 & firebase login
 if ($LASTEXITCODE -ne 0) { throw 'Google account authorization canceled; nothing was created.' }
 
-$projectsOutput = RunFirebase @('projects:list','--json')
+$projectsOutput = RunFirebase -CommandArgs @('projects:list','--json')
 $projects = $projectsOutput | ConvertFrom-Json
 $visible = @($projects.result | Where-Object { $_.projectId -eq $ProjectId })
 if ($visible.Count -eq 0) {
@@ -42,7 +42,7 @@ if ($visible.Count -eq 0) {
 Write-Host "Existing Firebase project confirmed: $ProjectId" -ForegroundColor Green
 
 # Reuse the Android app whenever it has already been registered.
-$appsOutput = RunFirebase @('apps:list','ANDROID','--project', $ProjectId,'--json')
+$appsOutput = RunFirebase -CommandArgs @('apps:list','ANDROID','--project', $ProjectId,'--json')
 $appsResult = $appsOutput | ConvertFrom-Json
 $androidApps = @($appsResult.result | Where-Object { $null -ne $_ })
 $matches = @($androidApps | Where-Object { $_.packageName -eq $AndroidPackage })
@@ -52,7 +52,7 @@ if ($matches.Count -eq 1) {
   Write-Host "Using existing Android app: $firebaseAppId" -ForegroundColor Green
 } else {
   Write-Host "Registering Android app $AndroidPackage in $ProjectId ..."
-  $createdOutput = RunFirebase @('apps:create','ANDROID','AQUACAMPUS Android',
+  $createdOutput = RunFirebase -CommandArgs @('apps:create','ANDROID','AQUACAMPUS Android',
     '--package-name',$AndroidPackage,'--project',$ProjectId,'--json')
   $created = $createdOutput | ConvertFrom-Json
   $firebaseAppId = [string]$created.result.appId
@@ -64,7 +64,7 @@ if ($matches.Count -eq 1) {
 
 $configPath = Join-Path $PSScriptRoot 'android\app\google-services.json'
 New-Item -ItemType Directory -Force -Path (Split-Path $configPath) | Out-Null
-RunFirebase @('apps:sdkconfig','ANDROID',$firebaseAppId,'--project',$ProjectId,'--out',$configPath) | Out-Null
+RunFirebase -CommandArgs @('apps:sdkconfig','ANDROID',$firebaseAppId,'--project',$ProjectId,'--out',$configPath) | Out-Null
 if (-not (Test-Path $configPath)) { throw 'Firebase Android configuration download failed.' }
 $config = (Get-Content -Raw -Path $configPath | ConvertFrom-Json)
 if ($config.project_info.project_id -ne $ProjectId) { throw 'Downloaded Android config has wrong Firebase project.' }
@@ -76,7 +76,7 @@ Write-Host "Android Firebase configuration saved to $configPath" -ForegroundColo
 
 # Firestore region is a permanent database choice. Do not silently create an
 # additional database or change the region of an existing database.
-$databasesOutput = RunFirebase @('firestore:databases:list','--project',$ProjectId,'--json')
+$databasesOutput = RunFirebase -CommandArgs @('firestore:databases:list','--project',$ProjectId,'--json')
 $databasesResponse = $databasesOutput | ConvertFrom-Json
 $dbList = @($databasesResponse.result | Where-Object { $null -ne $_ })
 $defaultDatabase = @($dbList | Where-Object { $_.name -match '/databases/\(default\)$' })
@@ -84,7 +84,7 @@ if ($defaultDatabase.Count -eq 0) {
   Write-Host "No default Firestore database found. Proposed region: $FirestoreRegion"
   $confirmed = Read-Host "Creating the Firestore database fixes its region permanently. Type CREATE"
   if ($confirmed -ne 'CREATE') { throw 'Firestore database creation canceled.' }
-  RunFirebase @('firestore:databases:create','(default)',"--location=$FirestoreRegion",
+  RunFirebase -CommandArgs @('firestore:databases:create','(default)',"--location=$FirestoreRegion",
      '--project',$ProjectId) | Out-Null
   Write-Host "Created default Firestore database in $FirestoreRegion" -ForegroundColor Green
 } else {
@@ -93,7 +93,7 @@ if ($defaultDatabase.Count -eq 0) {
 if (-not $SkipRuleDeploy) {
   $confirmedRules = Read-Host 'Deploy Firestore access-control rules to aquacampus-ed284? Type DEPLOY'
   if ($confirmedRules -ne 'DEPLOY') { throw 'Security rules deployment canceled.' }
-  RunFirebase @('deploy','--only','firestore:rules','--project',$ProjectId) | Out-Null
+  RunFirebase -CommandArgs @('deploy','--only','firestore:rules','--project',$ProjectId) | Out-Null
   Write-Host 'Firestore security rules deployed.' -ForegroundColor Green
 }
 
