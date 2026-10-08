@@ -2,6 +2,8 @@
 
 AQUACAMPUS is a Flutter **Android mobile application** with five role-based portals: Admin, Water Worker, Hostel Warden, Student and Teacher.
 
+**Selected backend:** Firebase project [`aquacampus-ed284`](https://console.firebase.google.com/project/aquacampus-ed284/overview). **Android package:** `com.example.aquacampus`. The Firebase project has been selected in the code, but account-managed Authentication, Firestore creation and rules deployment must be confirmed before a live APK can be released.
+
 The mobile app uses Firebase Authentication and Cloud Firestore as the backend. It has no simulation mode: there is no shortcut for logging in as an admin, and all campus facilities, tank readings, requests, supply confirmations and SOS incidents must be entered by authorised users.
 
 ## User workflows
@@ -21,6 +23,8 @@ The app **must** be connected to a real Firebase project. Until that configurati
 Set up the Firebase project, Email/Password Authentication, Firestore database, and deploy [Firestore security rules](firestore.rules). Register an Android application matching the package ID and supply the appropriate Firebase Android app configuration at build time. Bootstrap the first real admin in Firebase Console.
 
 See [Firebase live setup](docs/FIREBASE_LIVE_SETUP.md).
+
+**Simplified build:** Download the Firebase **Android** app's `google-services.json` from the project settings into `android/app/google-services.json`, then run `./SETUP_FIREBASE.ps1 -DeployRules` (after verifying database/rules) and `./build_apk.ps1 -LiveFirebase`. The build script extracts Android Firebase config and checks the project/package automatically.
 
 **GitHub Actions APK:** Build with an authenticated Android Firebase configuration. Never distribute a locally simulated release as the production campus app.
 
