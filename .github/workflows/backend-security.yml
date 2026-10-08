@@ -23,6 +23,22 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Validate backend bootstrap Python syntax
+        run: python3 -m py_compile tools/bootstrap_admin.py
+      - name: Validate Windows backend scripts syntax
+        shell: pwsh
+        run: |
+          $items = @('START_AQUACAMPUS_FIREBASE.ps1', 'BOOTSTRAP_ADMIN.ps1', 'build_apk.ps1')
+          foreach ($file in $items) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Join-Path (Get-Location) $file), [ref]$tokens, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.ToString() }
+              throw "Invalid PowerShell syntax in $file"
+            }
+          }
       - name: Install Firebase emulator and testing SDK
         run: npm install --no-audit --no-fund
       - name: Run Firestore role/security tests against emulator
