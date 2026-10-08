@@ -2252,7 +2252,6 @@ class MembersPage extends StatelessWidget {
           children: [
             const InfoBanner(
                 'SECURITY: New Firebase sign-ups are pending Students. Only Admin may approve or promote them to Worker, Warden, Teacher or Admin.'),
-member demo
             if (store.people.isEmpty)
               _empty(
                   'No registered cloud members. New users will appear here after Firebase is configured and an admin account is bootstrapped.'),
