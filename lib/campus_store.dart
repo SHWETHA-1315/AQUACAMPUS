@@ -18,6 +18,8 @@ const activityNames = [
   'Other'
 ];
 const campusId = 'main';
+// The only authorized Firebase backend for this AQUACAMPUS deployment.
+const aquacampusFirebaseProjectId = 'aquacampus-ed284';
 String timestamp() => DateTime.now().toIso8601String();
 
 class CampusStore extends ChangeNotifier {
@@ -66,9 +68,11 @@ class CampusStore extends ChangeNotifier {
   /// Production-only. No fabricated levels or role-switch login.
   Future<void> initialize() async {
     cloud = _apiKey.isNotEmpty && _appId.isNotEmpty &&
-        _sender.isNotEmpty && _project.isNotEmpty;
+        _sender.isNotEmpty && _project == aquacampusFirebaseProjectId &&
+        _appId.contains(':android:');
     if (!cloud) {
-      message = 'This AQUACAMPUS build needs campus Firebase configuration. '
+      message = 'This Android app needs an Android Firebase config for '
+          'aquacampus-ed284. '
           'Ask the administrator for the official connected Android APK.';
       loading = false;
       notifyListeners();
