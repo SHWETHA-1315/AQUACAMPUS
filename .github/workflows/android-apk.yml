@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: aquacampus-android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-apk:
     runs-on: ubuntu-latest
@@ -31,10 +35,27 @@ jobs:
       - name: Unit tests
         run: flutter test
       - name: Compile registered Firebase-connected Android APK
+        shell: bash
         run: |
+          set -euo pipefail
           test -f lib/firebase_android_config.dart || { echo "Firebase Android client config missing"; exit 1; }
           grep -q "aquacampus-ed284" lib/firebase_android_config.dart || { echo "Wrong Firebase project"; exit 1; }
-          flutter build apk --release
+          for attempt in 1 2 3; do
+            echo "Android release compilation attempt $attempt of 3"
+            if flutter build apk --release; then
+              exit 0
+            fi
+            # Sometimes Android SDK's NDK download ends as a partial/corrupt ZIP.
+            # On subsequent tries, clear only the incomplete NDK directory.
+            ndk_dir="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/ndk/28.2.13676358"
+            if [[ -d "$ndk_dir" && ! -f "$ndk_dir/source.properties" ]]; then
+              echo "Cleaning incomplete SDK NDK installation before retry"
+              rm -rf "$ndk_dir"
+            fi
+            sleep 8
+          done
+          echo "Release APK compilation failed after three attempts."
+          exit 1
       - name: Save APK to Actions artifacts
         uses: actions/upload-artifact@v4
         with:
