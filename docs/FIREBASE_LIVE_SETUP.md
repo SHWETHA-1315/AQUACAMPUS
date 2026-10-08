@@ -1,12 +1,12 @@
 # AQUACAMPUS — enable real multi-phone sync (Firebase Spark)
 
-The APK compiled without Firebase values is a **single-device offline demonstration**. For campus-wide operation, create and configure your own Firebase project. This guide does **not** ask you to upload secrets or passwords into a public GitHub repository.
+No APK can run in sample mode. AQUACAMPUS must be compiled with valid Firebase Android app values; otherwise it displays a blocking connection-required screen. For campus-wide operation, create and configure your own Firebase project. This guide does **not** ask you to upload secrets or passwords into a public GitHub repository.
 
 ## 1. Create the backend
 1. Open Firebase Console, create a Firebase project for AQUACAMPUS and keep its project ID.
 2. Enable **Authentication → Sign-in method → Email/Password**.
 3. Create **Cloud Firestore** in a nearby region. Use secured rules, **never test/open rules for production**.
-4. Register a Firebase **Web app** to obtain the public configuration fields `apiKey`, `appId`, `messagingSenderId`, `projectId` and optional `authDomain`. The Flutter Android app uses explicit `FirebaseOptions`, so no Admin SDK/service-account key is needed in the app.
+4. Register a Firebase **Android app** (package: `com.example.aquacampus`) to obtain the public configuration fields `apiKey`, `appId`, `messagingSenderId`, `projectId` and optional `authDomain`. The Flutter Android app uses explicit `FirebaseOptions`; use the Android app ID (containing `:android:`), not a Web app ID. Never embed Admin SDK credentials or service-account keys.
 5. Install Firebase CLI: `npm install -g firebase-tools`; run `firebase login`, then `firebase use --add` from the repo root. Deploy: `firebase deploy --only firestore:rules`.
 6. Keep `firestore.rules` identical to your app's schema, including `tankReadings`. Any future rule changes must be deployed separately; APK builds do not deploy backend rules automatically.
 
