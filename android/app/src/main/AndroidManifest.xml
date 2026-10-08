@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required by Firebase Auth and Firestore in release builds. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
-        android:label="aquacampus"
+        android:label="AQUACAMPUS"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
