@@ -162,6 +162,17 @@ class CampusStore extends ChangeNotifier {
     await FirebaseAuth.instance.signOut();
   }
 
+  /// Request a genuine Firebase password-reset email; no passwords or
+  /// verification codes are stored in the campus database.
+  Future<void> sendPasswordReset(String email) async {
+    if (!cloud) throw StateError('Campus Firebase authentication is unavailable');
+    final address = email.trim();
+    if (address.isEmpty || !address.contains('@')) {
+      throw StateError('Enter your registered email address first');
+    }
+    await FirebaseAuth.instance.sendPasswordResetEmail(email: address);
+  }
+
   Future<void> emailLogin(String email, String password,
       {bool create = false, String name = ''}) async {
     if (!cloud) throw StateError('Firebase not configured');
