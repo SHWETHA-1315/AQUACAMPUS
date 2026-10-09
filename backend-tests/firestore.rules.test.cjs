@@ -56,6 +56,7 @@ test.beforeEach(async () => {
     const db=ctx.firestore();
     for (const [id,email,role,approved,facilityId] of [
       ['admin','admin@campus.test','admin',true,''],
+      ['admin2','admin2@campus.test','admin',true,''],
       ['worker','worker@campus.test','worker',true,''],
       ['warden','warden@campus.test','warden',true,'hostel-1'],
       ['student','student@campus.test','student',true,'hostel-1'],
@@ -231,4 +232,33 @@ test('role restricted SOS feed and member details remain private', async () => {
   await assertSucceeds(getDocs(collection(worker,'campuses/main/sos')));
   await assertFails(getDoc(doc(teacher,'users','student')));
   await assertSucceeds(getDoc(doc(teacher,'users','teacher')));
+});
+
+test('both protected admins have identical campus and member-management permissions', async () => {
+  const admin1=context('admin','admin@campus.test');
+  const admin2=context('admin2','admin2@campus.test');
+  for (const db of [admin1,admin2]) {
+    await assertSucceeds(getDocs(collection(db,'campuses/main/facilities')));
+    await assertSucceeds(getDocs(collection(db,'campuses/main/tanks')));
+    await assertSucceeds(getDocs(collection(db,'campuses/main/requests')));
+    await assertSucceeds(getDocs(collection(db,'campuses/main/sos')));
+    await assertSucceeds(getDocs(query(collection(db,'users'),
+      where('campusId','==','main'))));
+  }
+  await assertSucceeds(updateDoc(doc(admin2,'users','pending'),{
+    role:'teacher',approved:true,facilityId:'',room:''
+  }));
+  await assertSucceeds(setDoc(doc(admin2,path('facilities','hostel-new')),
+    facility()));
+});
+
+test('neither co-admin can demote the other or promote a third administrator', async () => {
+  const admin1=context('admin','admin@campus.test');
+  const admin2=context('admin2','admin2@campus.test');
+  await assertFails(updateDoc(doc(admin1,'users','admin2'),{approved:false}));
+  await assertFails(updateDoc(doc(admin2,'users','admin'),{role:'worker'}));
+  await assertFails(updateDoc(doc(admin1,'users','pending'),{
+    role:'admin',approved:true,facilityId:'',room:''
+  }));
+  await assertFails(updateDoc(doc(admin2,'users','admin2'),{approved:false}));
 });
