@@ -38,7 +38,10 @@ const waterRequest = (requestedBy = 'student') => ({
 });
 
 let env;
-function context(id, email) { return env.authenticatedContext(id, {email}).firestore(); }
+function context(id, email, verified = true) {
+  return env.authenticatedContext(id,
+    {email, email_verified: verified}).firestore();
+}
 const path = (root, tail) => 'campuses/main/' + root + '/' + tail;
 test.before(async () => {
   env = await initializeTestEnvironment({
@@ -73,6 +76,8 @@ test('anonymous and unapproved accounts cannot read campus records', async () =>
   const pending=context('pending','pending@campus.test');
   await assertFails(getDoc(doc(anon,path('facilities','hostel-1'))));
   await assertFails(getDoc(doc(pending,path('facilities','hostel-1'))));
+  const unverified=context('student','student@campus.test',false);
+  await assertFails(getDoc(doc(unverified,path('facilities','hostel-1'))));
 });
 test('registration creates only an unapproved student, without arbitrary fields', async () => {
   const db=context('fresh','fresh@campus.test');
