@@ -91,6 +91,8 @@ class CampusStore extends ChangeNotifier {
       user['approved'] == true &&
       (FirebaseAuth.instance.currentUser?.emailVerified ?? false);
   bool get isAdmin => role == 'admin';
+  int get adminCount => people.where((person) =>
+      person['approved'] == true && person['role'] == 'admin').length;
   bool get isWorker => role == 'worker';
   bool get isStaff => isAdmin || isWorker;
   bool get isWarden => role == 'warden';
@@ -1035,6 +1037,16 @@ class CampusStore extends ChangeNotifier {
     if (!isAdmin) throw StateError('Admin access required');
     if (memberId == uid) {
       throw StateError('Cannot alter your own Admin permissions.');
+    }
+    final target = people.where((p) => p['id'] == memberId).toList();
+    if (target.isEmpty) {
+      throw StateError('Member not loaded. Refresh People & roles and retry.');
+    }
+    if (target.first['role'] == 'admin') {
+      throw StateError('Co-admin accounts are protected. Only the Firebase project owner can change administrators.');
+    }
+    if (role == 'admin') {
+      throw StateError('Admin access requires project-owner activation and a verified account.');
     }
     if (!roleNames.contains(role) ||
         room.length > 80 ||
