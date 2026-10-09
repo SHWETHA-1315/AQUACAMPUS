@@ -57,7 +57,9 @@ service cloud.firestore {
         request.resource.data.room == '' &&
         request.resource.data.campusId == 'main' &&
         request.resource.data.email == request.auth.token.email;
-      allow update: if isAdmin() &&
+      // Protect the active operator from accidentally removing the last
+      // trusted Admin through the mobile member editor.
+      allow update: if isAdmin() && userId != request.auth.uid &&
         resource.data.campusId == 'main' &&
         request.resource.data.campusId == resource.data.campusId &&
         request.resource.data.email == resource.data.email &&
