@@ -31,6 +31,16 @@ def audit(first, second):
         raise ValueError(f"Wrong Google Cloud credentials project: {adc_project}")
     session = AuthorizedSession(google_credentials)
 
+    auth_config = session.get(
+        f"https://identitytoolkit.googleapis.com/admin/v2/projects/{PROJECT}/config",
+        timeout=25,
+    )
+    auth_config.raise_for_status()
+    email_auth = auth_config.json().get("signIn", {}).get("email", {})
+    if email_auth.get("enabled") is not True or email_auth.get("passwordRequired") is not True:
+        raise ValueError("Real Firebase Email/Password Authentication is not enabled.")
+    print("PASS: live Firebase Email/Password authentication is enabled.")
+
     release_url = f"https://firebaserules.googleapis.com/v1/projects/{PROJECT}/releases/cloud.firestore"
     release = session.get(release_url, timeout=25)
     release.raise_for_status()
@@ -48,7 +58,7 @@ def audit(first, second):
     app = firebase_admin.initialize_app(options={"projectId": PROJECT})
     db = firestore.client(app=app)
     resolved_uids = set()
-    for email in emails:
+    for admin_number, email in enumerate(emails, start=1):
         account = auth.get_user_by_email(email, app=app)
         if account.disabled or not account.email_verified:
             raise ValueError(f"{email}: Auth account disabled or email not verified.")
@@ -60,7 +70,7 @@ def audit(first, second):
                 or person.get("campusId") != "main" or person.get("email", "").lower() != email):
             raise ValueError(f"{email}: approved Admin role not active or identity mismatch.")
         resolved_uids.add(account.uid)
-        print(f"PASS: {email} is an enabled, verified and approved full-control Admin.")
+        print(f"PASS: Admin {admin_number} is enabled, email-verified and approved.")
 
     active_admins = {
         doc.id for doc in db.collection("users").where(
