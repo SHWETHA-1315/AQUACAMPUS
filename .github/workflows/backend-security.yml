@@ -8,6 +8,7 @@ on:
       - 'package.json'
       - 'backend-tests/**'
       - 'tools/bootstrap_admin.py'
+      - 'tools/activate_two_admins.py'
       - 'BOOTSTRAP_ADMIN.ps1'
       - 'START_AQUACAMPUS_FIREBASE.ps1'
       - '.github/workflows/firebase-cloud-deploy.yml'
@@ -28,7 +29,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Validate backend bootstrap Python syntax
-        run: python3 -m py_compile tools/bootstrap_admin.py
+        run: python3 -m py_compile tools/bootstrap_admin.py tools/activate_two_admins.py
       - name: Validate Windows backend scripts syntax
         shell: pwsh
         run: |
