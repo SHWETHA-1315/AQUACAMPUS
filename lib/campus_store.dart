@@ -166,6 +166,24 @@ class CampusStore extends ChangeNotifier {
       .where((u) => u['facilityId'] == facilityId && u['day'] == dateKey())
       .fold(0.0, (a, u) => a + nval(u['usedLitres']).toDouble());
 
+  /// Re-establishes live Firestore listeners without changing the signed-in
+  /// identity or copying cached/offline data into campus records.
+  void retrySync() {
+    if (!cloud) {
+      message = 'Firebase has not initialized; restart the app.';
+      notifyListeners();
+      return;
+    }
+    final authUser = FirebaseAuth.instance.currentUser;
+    if (authUser == null) {
+      message = 'Please sign in again to resume live campus data.';
+      notifyListeners();
+      return;
+    }
+    message = null;
+    _onAuth(authUser);
+  }
+
   Future<void> logout() async {
     if (!cloud) return;
     await FirebaseAuth.instance.signOut();
