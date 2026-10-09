@@ -10,6 +10,31 @@ AQUACAMPUS is a Flutter **Android mobile application** with five role-based port
 
 The mobile app uses Firebase Authentication and Cloud Firestore as the backend. It has no simulation mode: there is no shortcut for logging in as an admin, and all campus facilities, tank readings, requests, supply confirmations and SOS incidents must be entered by authorised users.
 
+## Dual-admin production readiness
+
+The Android build supports **two equally privileged, separate Admin accounts**.
+Both can manage campus buildings, tanks, workers, students, teachers, wardens,
+water requests, SOS reports and notices. Other roles are permission-restricted.
+
+Two Admin profiles must be **real, distinct, registered, email-verified**
+Firebase users on `aquacampus-ed284`; the GitHub source does not secretly
+create or grant users. The project owner must explicitly authorize deployment
+and run `tools/activate_two_admins.py` to activate both accounts. Admin
+promotion and demotion are blocked in the mobile client and Firestore rules to
+prevent a takeover. Both Admin accounts remain protected.
+
+The `firebase-production` GitHub workflow deploys rules and supports a
+two-email/confirmation owner-authorized bootstrap. The read-only
+`tools/check_production_ready.py` audit checks actual production rule
+contents and both approved Admin identities; emulator tests are **not**
+production verification. See [Firebase live setup](docs/FIREBASE_LIVE_SETUP.md).
+
+**Verified separately:** CI Flutter/static analysis, Android APK compilation,
+Firebase emulator role-security tests. **Not automatically verified:** live
+Firebase owner deployment, two real Admin activations, Firebase email delivery,
+two-phone real-time synchronization and manual water delivery. Do not claim
+these are completed until checked.
+
 ## User workflows
 
 - Admin creates hostels, academic buildings, canteens and tank details; approves and assigns members; sets water policies and publishes notices.
