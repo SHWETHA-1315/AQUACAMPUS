@@ -14,9 +14,24 @@ Set-Location $PSScriptRoot
 
 function RunFirebase {
   param([string[]]$CommandArgs)
-  $output = & firebase @CommandArgs 2>&1
-  if ($LASTEXITCODE -ne 0) {
-    throw "Firebase CLI failed: firebase $($CommandArgs -join ' ')$([Environment]::NewLine)$($output -join [Environment]::NewLine)"
+  # Windows PowerShell 5.1 treats redirected native stderr as ErrorRecords.
+  # Keep progress messages separate from JSON, and use the process exit code.
+  $stderrPath = [System.IO.Path]::GetTempFileName()
+  $savedPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = 'Continue'
+    $output = & $script:FirebaseCli @CommandArgs 2> $stderrPath
+    $exitCode = $LASTEXITCODE
+    $stderr = [System.IO.File]::ReadAllText($stderrPath)
+  } finally {
+    $ErrorActionPreference = $savedPreference
+    Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+  }
+  if ($exitCode -ne 0) {
+    throw "Firebase CLI failed (exit $exitCode): firebase $($CommandArgs -join ' ')$([Environment]::NewLine)$($output | Out-String)$stderr"
+  }
+  if (-not [string]::IsNullOrWhiteSpace($stderr)) {
+    Write-Host $stderr.TrimEnd()
   }
   return ($output | Out-String)
 }
@@ -29,8 +44,15 @@ if (-not (Get-Command firebase -ErrorAction SilentlyContinue)) {
   & npm install --global firebase-tools
   if ($LASTEXITCODE -ne 0) { throw 'Firebase CLI installation failed' }
 }
+# Prefer npm's native launcher over firebase.ps1 on Windows.
+$nativeCli = Get-Command firebase.cmd -ErrorAction SilentlyContinue
+if ($nativeCli) {
+  $script:FirebaseCli = $nativeCli.Source
+} else {
+  $script:FirebaseCli = (Get-Command firebase -ErrorAction Stop).Source
+}
 Write-Host 'A Google login window may open. Authorize the Firebase project owner account.' -ForegroundColor Cyan
-& firebase login
+& $script:FirebaseCli login
 if ($LASTEXITCODE -ne 0) { throw 'Google account authorization canceled; nothing was created.' }
 
 $projectsOutput = RunFirebase -CommandArgs @('projects:list','--json')
