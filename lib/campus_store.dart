@@ -132,6 +132,31 @@ class CampusStore extends ChangeNotifier {
         widthCm: nval(item['widthCm']).toDouble(),
         diameterCm: nval(item['diameterCm']).toDouble(),
       );
+  List<Map<String, dynamic>> tanksFor(String facilityId) =>
+      tanks.where((t) => t['facilityId'] == facilityId).toList();
+
+  bool hasCompleteReadingsFor(String facilityId) {
+    final assigned = tanksFor(facilityId);
+    return assigned.isNotEmpty && assigned.every(
+        (tank) => '${tank['lastMeasuredAt'] ?? ''}'.isNotEmpty);
+  }
+
+  int missingReadingsFor(String facilityId) => tanksFor(facilityId)
+      .where((tank) => '${tank['lastMeasuredAt'] ?? ''}'.isEmpty)
+      .length;
+
+  String facilityWaterSummary(String facilityId) {
+    final assigned = tanksFor(facilityId);
+    if (assigned.isEmpty) return 'No tanks registered';
+    final measured = assigned.length - missingReadingsFor(facilityId);
+    if (measured == 0) return 'Awaiting manual readings';
+    final amount = availableFor(facilityId).toStringAsFixed(1);
+    if (measured != assigned.length) {
+      return '$amount L (partial: $measured/${assigned.length} tanks)';
+    }
+    return '$amount L (all ${assigned.length} tanks measured)';
+  }
+
   double availableFor(String id) => tanks
       .where((t) => t['facilityId'] == id)
       .fold(0.0, (total, t) => total + tankAvailable(t));
