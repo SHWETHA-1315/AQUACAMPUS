@@ -727,19 +727,26 @@ class ScreenBody extends StatelessWidget {
         end: Alignment.bottomCenter,
       ),
     ),
-    child: ListView(
+    child: ListView.builder(
+      key: PageStorageKey<String>('aquacampus-scroll-$title'),
       padding: const EdgeInsets.fromLTRB(16, 15, 16, 30),
-      children: [
-        Row(children: [
-          Expanded(child: OceanHero(title: title, subtitle: subtitle, compact: true)),
-          if (action != null) ...[
-            const SizedBox(width: 9),
-            action!,
-          ],
-        ]),
-        const SizedBox(height: 21),
-        ...children,
-      ],
+      // Lazily mount/render cards instead of creating every Firestore
+      // request/tank/facility card up front on each listener update.
+      itemCount: children.length + 2,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Row(children: [
+            Expanded(child: OceanHero(
+              title: title, subtitle: subtitle, compact: true)),
+            if (action != null) ...[
+              const SizedBox(width: 9),
+              action!,
+            ],
+          ]);
+        }
+        if (index == 1) return const SizedBox(height: 21);
+        return children[index - 2];
+      },
     ),
   );
 }
