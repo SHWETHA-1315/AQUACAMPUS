@@ -51,6 +51,8 @@ class CampusStore extends ChangeNotifier {
   bool loading = true;
   bool cloud = false;
   bool signedIn = false;
+  // Incomplete Firebase Auth signups can be restored without Admin privileges.
+  bool profileMissing = false;
   String? message;
   Map<String, dynamic> user = {};
   List<Map<String, dynamic>> facilities = [];
@@ -131,11 +133,18 @@ class CampusStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Block operations if any required cloud collection is offline or stale.
-  void _ensureLive() {
-    if (!cloud || !backendConnected) {
+  /// Gate writes on fresh server-backed data for their required collections.
+  /// A failed unrelated feed must not disable another role's valid workflow.
+  void _ensureLive({List<String> feeds = const []}) {
+    if (!cloud || !signedIn || !approved) {
+      throw StateError('Sign in to an approved account to save campus data.');
+    }
+    final required = feeds.isEmpty ? _streamOnline.keys.toList() : feeds;
+    final missing = required.where((key) => _streamOnline[key] != true).toList();
+    if (missing.isNotEmpty || required.isEmpty) {
       throw StateError(
-        'Campus data is still loading. Check your internet and try again. Nothing was saved.',
+        'Live campus data is not ready (${missing.isEmpty ? 'loading' : missing.join(', ')}). '
+        'Check your internet, tap Try again, and retry. Nothing was saved.',
       );
     }
   }
@@ -279,6 +288,35 @@ class CampusStore extends ChangeNotifier {
   bool get emailVerified =>
       FirebaseAuth.instance.currentUser?.emailVerified ?? false;
 
+  /// Recover a missing self-owned Firestore account created by a partial signup.
+  /// A transaction never overwrites an existing Admin/member profile.
+  Future<void> restoreMissingProfile() async {
+    final current = FirebaseAuth.instance.currentUser;
+    if (!cloud || current == null || current.email == null) {
+      throw StateError('Sign in first to restore your campus profile.');
+    }
+    final email = current.email!.trim();
+    final ref = _users.doc(current.uid);
+    await _firestore.runTransaction<void>((tx) async {
+      final existing = await tx.get(ref);
+      if (existing.exists) return;
+      tx.set(ref, {
+        'name': current.displayName?.trim().isNotEmpty == true
+            ? current.displayName!.trim()
+            : email.split('@').first,
+        'email': email,
+        'role': 'student',
+        'facilityId': '',
+        'room': '',
+        'approved': false,
+        'campusId': campusId,
+        'createdAt': timestamp(),
+      });
+    });
+    profileMissing = false;
+    await _onAuth(FirebaseAuth.instance.currentUser);
+  }
+
   Future<void> resendEmailVerification() async {
     final current = FirebaseAuth.instance.currentUser;
     if (!cloud || current == null) {
@@ -391,6 +429,7 @@ class CampusStore extends ChangeNotifier {
   Future<void> _onAuth(User? authUser) async {
     final generation = ++_authGeneration;
     _clearSubscriptions();
+    profileMissing = false;
     if (authUser == null) {
       signedIn = false;
       user = {};
@@ -432,6 +471,7 @@ class CampusStore extends ChangeNotifier {
             if (generation != _authGeneration) return;
             final newData = snapshot.data();
             if (newData == null) {
+              profileMissing = true;
               for (final subscription in _subscriptions) {
                 subscription.cancel();
               }
@@ -446,6 +486,7 @@ class CampusStore extends ChangeNotifier {
               notifyListeners();
               return;
             }
+            profileMissing = false;
             final oldApproved = approved;
             final oldRole = role;
             final oldFacility = myFacilityId;
@@ -516,7 +557,7 @@ class CampusStore extends ChangeNotifier {
             _streamOnline[collection] = false;
             // A failed listener must not leave stale campus records on screen.
             handle([]);
-            _connectionError(error);
+            _connectionError(error, collection: collection);
             notifyListeners();
           },
         );
@@ -554,11 +595,14 @@ class CampusStore extends ChangeNotifier {
     );
   }
 
-  void _connectionError(Object error) {
-    debugPrint('Campus connection: $error');
-    message = error is FirebaseException && error.code == 'permission-denied'
-        ? 'Access could not be confirmed. Try again. If it continues, verify your email and ask Admin to check your account.'
-        : 'Cannot load campus data. Check your internet and try again.';
+  void _connectionError(Object error, {String collection = 'campus'}) {
+    debugPrint('Campus $collection connection: $error');
+    final reason = error is FirebaseException && error.code == 'permission-denied'
+        ? 'Permission denied. Confirm Firebase rules, email verification and Admin approval.'
+        : error is FirebaseException && error.code == 'failed-precondition'
+        ? 'Firestore needs an index for this query. Ask the project owner to check database indexes.'
+        : 'Check your internet and Firebase service, then retry.';
+    message = 'Cannot sync $collection. $reason';
   }
 
   void _subscribeCloud() {
@@ -613,7 +657,7 @@ class CampusStore extends ChangeNotifier {
                 if (generation != _authGeneration) return;
                 _streamOnline['people'] = false;
                 people = [];
-                _connectionError(error);
+                _connectionError(error, collection: 'people');
                 notifyListeners();
               },
             ),
@@ -680,7 +724,7 @@ class CampusStore extends ChangeNotifier {
       'essentialLitresPerResident': essentialLitresPerResident,
       'createdAt': timestamp(),
     };
-    _ensureLive();
+    _ensureLive(feeds: ['facilities']);
 
     await _col('facilities').add(item);
   }
@@ -721,7 +765,7 @@ class CampusStore extends ChangeNotifier {
       'updatedBy': uid,
       'updatedAt': timestamp(),
     };
-    _ensureLive();
+    _ensureLive(feeds: ['facilities']);
 
     await _col('facilities').doc(id).update(changes);
   }
@@ -765,7 +809,7 @@ class CampusStore extends ChangeNotifier {
       'lastMeasuredAt': '',
       'createdAt': timestamp(),
     };
-    _ensureLive();
+    _ensureLive(feeds: ['facilities', 'tanks']);
 
     await _col('tanks').add(item);
   }
@@ -794,7 +838,7 @@ class CampusStore extends ChangeNotifier {
       'measuredAt': now,
       'recordedBy': uid,
     };
-    _ensureLive();
+    _ensureLive(feeds: ['tanks']);
 
     final batch = _firestore.batch();
     batch.update(_col('tanks').doc(tankId), values);
@@ -839,7 +883,7 @@ class CampusStore extends ChangeNotifier {
       'fulfilledBy': '',
       'fulfilledAt': '',
     };
-    _ensureLive();
+    _ensureLive(feeds: ['facilities', 'requests']);
 
     await _col('requests').add(data);
   }
@@ -866,14 +910,14 @@ class CampusStore extends ChangeNotifier {
       'approvedBy': uid,
       'reviewedAt': timestamp(),
     };
-    _ensureLive();
+    _ensureLive(feeds: ['requests']);
 
     await _col('requests').doc(id).update(values);
   }
 
   Future<void> fulfillRequest(String id) async {
     if (!isStaff) throw StateError('Worker or admin access required');
-    _ensureLive();
+    _ensureLive(feeds: ['requests', 'facilities', 'dailyUsage']);
 
     final reqRef = _col('requests').doc(id);
     await _firestore.runTransaction((tx) async {
@@ -944,7 +988,7 @@ class CampusStore extends ChangeNotifier {
       'createdAt': timestamp(),
       'resolvedAt': '',
     };
-    _ensureLive();
+    _ensureLive(feeds: ['facilities']);
 
     await _col('sos').add(data);
   }
@@ -956,7 +1000,7 @@ class CampusStore extends ChangeNotifier {
       'resolvedAt': timestamp(),
       'resolvedBy': uid,
     };
-    _ensureLive();
+    _ensureLive(feeds: ['sos']);
 
     await _col('sos').doc(id).update(values);
   }
@@ -975,7 +1019,7 @@ class CampusStore extends ChangeNotifier {
       'createdBy': uid,
       'createdAt': timestamp(),
     };
-    _ensureLive();
+    _ensureLive(feeds: ['notices', 'facilities']);
 
     await _col('notices').add(item);
   }
@@ -993,7 +1037,10 @@ class CampusStore extends ChangeNotifier {
     }
     if (!roleNames.contains(role) ||
         room.length > 80 ||
-        (facilityId.isNotEmpty && facility(facilityId) == null)) {
+        (facilityId.isNotEmpty && facility(facilityId) == null) ||
+        (approved && role == 'student' && facilityId.isEmpty) ||
+        (approved && role == 'warden' &&
+            facility(facilityId)?['type'] != 'hostel')) {
       throw StateError('Invalid member role, room, or facility.');
     }
     final values = {
@@ -1002,7 +1049,7 @@ class CampusStore extends ChangeNotifier {
       'facilityId': facilityId,
       'room': room,
     };
-    _ensureLive();
+    _ensureLive(feeds: ['people', 'facilities']);
 
     await _users.doc(memberId).update(values);
   }
