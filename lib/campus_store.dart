@@ -183,7 +183,8 @@ class CampusStore extends ChangeNotifier {
           isStaff ||
           n['targetFacilityId'] == myFacilityId ||
           (isTeacher &&
-              facility('${n['targetFacilityId']}')?['type'] == 'college'))
+              ['college', 'canteen'].contains(
+                  facility('${n['targetFacilityId']}')?['type'])))
       .toList()
     ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
   List<Map<String, dynamic>> get visibleTanks {
