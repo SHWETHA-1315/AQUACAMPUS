@@ -386,7 +386,7 @@ class _EntryPageState extends State<EntryPage> {
                           ),
                           const SizedBox(height: 7),
                           const Text(
-                            'Secure sign-in · Firebase Authentication',
+                            'Sign in with your email',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.black54,
@@ -607,8 +607,8 @@ class ApprovalPage extends StatelessWidget {
             const SizedBox(height: 14),
             if (!store.emailVerified) ...[
               const Text(
-                'Verify your email using the Firebase link we sent. '
-                'A real campus administrator must then approve your role.',
+                'Check your inbox and Spam folder for the verification link. '
+                'Admin approval is also needed to use campus features.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12, color: Colors.black54),
               ),
@@ -686,7 +686,13 @@ class ApprovalPage extends StatelessWidget {
 }
 
 String _nice(String s) =>
-    s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+    const {
+      'fulfilled': 'Delivered',
+      'resolved': 'Fixed',
+      'teacher': 'Teacher (faculty)',
+      'worker': 'Water worker',
+    }[s] ??
+    (s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}');
 
 String navTitle(String key) =>
     const {
@@ -1449,7 +1455,7 @@ class OverviewPage extends StatelessWidget {
           },
         ),
         if (target != null) ...[
-          const SectionTitle('Your hostel water budget'),
+          const SectionTitle('Your hostel water'),
           Surface(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1462,22 +1468,19 @@ class OverviewPage extends StatelessWidget {
                   ),
                 ),
                 _labelValue(
-                  'Measured/estimated stored volume',
+                  'Water in tanks (estimate)',
                   s.facilityWaterSummary('${target['id']}'),
                 ),
+                _labelValue('People in this hostel', '${target['occupants']}'),
                 _labelValue(
-                  'Registered population estimate',
-                  '${target['occupants']}',
-                ),
-                _labelValue(
-                  'Indicative share (15% reserve)',
+                  'Water per person (15% kept aside)',
                   s.hasCompleteReadingsFor('${target['id']}')
                       ? litres(share)
                       : 'Requires all tank readings',
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Informational planning figure, NOT an enforced personal allowance. Drinking and essential hygiene must be prioritised.',
+                  'This is a planning estimate, not a personal limit. Keep drinking and washing needs first.',
                   style: TextStyle(
                     fontSize: 11,
                     color: Colors.black54,
@@ -1525,14 +1528,14 @@ class OverviewPage extends StatelessWidget {
               ],
             ),
           ),
-        const SectionTitle('Automatic in-app low-water warnings'),
+        const SectionTitle('Low-water warnings'),
         for (final f in myFacilities)
           if (s.hasCompleteReadingsFor('${f['id']}') &&
               s.availableFor('${f['id']}') <= s.lowWaterThreshold(f))
             InfoBanner(
-              '${f['name']}: about ${litres(s.availableFor('${f['id']}'))} remaining, below the configured ${litres(s.lowWaterThreshold(f))} threshold. '
-              '${f['type'] == 'hostel' ? 'Indicative per-resident share after 15% reserve: ${litres(WaterMath.perPersonShare(s.availableFor('${f['id']}'), nval(f['occupants']).toInt()))}. ' : ''}'
-              'Worker must verify the dipstick reading; this is not an automatic tank sensor.',
+              '${f['name']}: about ${litres(s.availableFor('${f['id']}'))} remaining, below the warning level of ${litres(s.lowWaterThreshold(f))}. '
+              '${f['type'] == 'hostel' ? 'Estimated water per person, with 15% kept aside: ${litres(WaterMath.perPersonShare(s.availableFor('${f['id']}'), nval(f['occupants']).toInt()))}. ' : ''}'
+              'Ask the worker to check the measured water level.',
               warning: true,
             ),
         const SectionTitle('Announcements'),
@@ -1605,8 +1608,8 @@ class PlannerPage extends StatelessWidget {
       children: [
         InfoBanner(
           fullVisibility
-              ? 'Activity demand is based on submitted requests only. Admin can configure the essential litres per resident for each hostel. No automatic metering.'
-              : 'This is your own submitted activity demand, NOT every resident’s usage. Essential drinking, bathing, sanitation and accessibility must never be blocked by an app estimate.',
+              ? 'This plan uses water requests and the basic water amount set by Admin. Water use is not measured automatically.'
+              : 'This shows your own requests. It does not show everyone’s water use. Drinking and basic washing needs come first.',
         ),
         LayoutBuilder(
           builder: (ctx, box) {
@@ -1618,7 +1621,7 @@ class PlannerPage extends StatelessWidget {
                 SizedBox(
                   width: w,
                   child: MetricBox(
-                    'Submitted extra demand',
+                    'Water requested',
                     litres(totalExtra),
                     Icons.water_drop_outlined,
                   ),
@@ -1626,7 +1629,7 @@ class PlannerPage extends StatelessWidget {
                 SizedBox(
                   width: w,
                   child: MetricBox(
-                    'Confirmed supplied',
+                    'Water delivered',
                     litres(supplied),
                     Icons.check_circle_outline,
                   ),
@@ -1634,7 +1637,7 @@ class PlannerPage extends StatelessWidget {
                 SizedBox(
                   width: w,
                   child: MetricBox(
-                    'Awaiting worker review',
+                    'Waiting for review',
                     '$pending',
                     Icons.pending_actions,
                     accent: amber,
@@ -1654,13 +1657,13 @@ class PlannerPage extends StatelessWidget {
         ),
         const SectionTitle('Water needed and available'),
         if (s.visibleFacilities.isEmpty)
-          _empty('Awaiting location assignment from admin.'),
+          _empty('Ask Admin to assign your building.'),
         for (final f in s.visibleFacilities)
           _facilityForecast(f, requestsToday, fullVisibility),
-        const SectionTitle('Activity totals submitted today'),
+        const SectionTitle('Today’s requests by activity'),
         if (requestsToday.isEmpty)
           _empty(
-            'No activity requests for today. Tap + to tell your water worker what is needed.',
+            'No requests today. Tap Request water to tell staff what you need.',
           ),
         for (final activity in activityNames)
           if (requestsToday.any((r) => r['activity'] == activity))
@@ -1697,7 +1700,7 @@ class PlannerPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Choose bathing, laundry, room cleaning, cooking or another activity. Enter people/loads and an adjustable water rate. Worker receives the request instantly when Firebase is configured.',
+                'Choose an activity. Enter the number of people or laundry loads and litres needed for each. Staff can review your request in the app.',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.black54,
@@ -1708,13 +1711,13 @@ class PlannerPage extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: () => RequestsPage(store: s)._request(context),
                 icon: const Icon(Icons.add),
-                label: const Text('Submit today’s water requirement'),
+                label: const Text('Request water'),
               ),
             ],
           ),
         ),
         const InfoBanner(
-          'This app plans supply; a worker must confirm any physical delivery. Demand forecasting can be inaccurate if residents do not submit activity plans.',
+          'The plan is more useful when everyone sends their water needs. A worker must confirm delivery after supplying water.',
         ),
       ],
     );
@@ -1745,7 +1748,7 @@ class PlannerPage extends StatelessWidget {
             const SizedBox(height: 9),
             Text(
               store.tanksFor(id).isEmpty
-                  ? 'No registered tanks for this location. Ask your Admin to add a real tank before forecasting.'
+                  ? 'No tanks for this building. Ask Admin to add one first.'
                   : 'Water forecast unavailable: ${store.missingReadingsFor(id)} of ${store.tanksFor(id).length} tank(s) need a worker measurement.',
               style: const TextStyle(color: Colors.black54),
             ),
@@ -1784,20 +1787,18 @@ class PlannerPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 9),
-          _labelValue('Tank-based stored water estimate', litres(available)),
+          _labelValue('Water in tanks (estimate)', litres(available)),
           if (residents > 0)
             _labelValue(
-              'Essential plan (${formatter.format(essentialRate)} L × $residents)',
+              'Basic water (${formatter.format(essentialRate)} L × $residents)',
               litres(baseline),
             ),
           _labelValue(
-            fullVisibility
-                ? 'Submitted activity demand'
-                : 'Your submitted activities',
+            fullVisibility ? 'Water requested' : 'Your water requests',
             litres(activityDemand),
           ),
           if (fullVisibility || residents == 0)
-            _labelValue('Combined forecast', litres(predicted)),
+            _labelValue('Total water needed', litres(predicted)),
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
@@ -1815,8 +1816,8 @@ class PlannerPage extends StatelessWidget {
               padding: const EdgeInsets.only(top: 10),
               child: InfoBanner(
                 budget.essentialAtRisk
-                    ? 'URGENT: estimated essential water shortage ${litres(budget.essentialShortfall)}. Arrange supply and protect drinking/sanitation.'
-                    : 'Flexible activity shortage ${litres(shortage)}. Reschedule optional laundry/cleaning, subject to student needs. 15% reserve included.',
+                    ? 'Urgent: basic water is short by ${litres(budget.essentialShortfall)}. Arrange water for drinking and washing first.'
+                    : 'Extra activities are short by ${litres(shortage)}. If possible, move laundry or cleaning to later. 15% of water is kept aside.',
                 warning: true,
               ),
             ),
@@ -1824,7 +1825,7 @@ class PlannerPage extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.only(top: 10),
               child: Text(
-                'Other residents’ unsubmitted/approved demand is not shown in this personal view.',
+                'This view shows your own requests, not other people’s requests.',
                 style: TextStyle(fontSize: 11, color: Colors.black54),
               ),
             ),
@@ -1992,7 +1993,7 @@ class FacilitiesPage extends StatelessWidget {
                   _labelValue('Residents', '${f['occupants']}'),
                 if (type == 'canteen')
                   _labelValue(
-                    'Daily supply cap',
+                    'Daily water limit',
                     litres(nval(f['dailyCapLitres'])),
                   ),
                 _labelValue(
@@ -2087,7 +2088,7 @@ class FacilitiesPage extends StatelessWidget {
                     decimal: true,
                   ),
                   decoration: const InputDecoration(
-                    labelText: 'Daily canteen cap (litres)',
+                    labelText: 'Daily canteen limit (L)',
                   ),
                 ),
               ],
@@ -2421,10 +2422,7 @@ class TanksPage extends StatelessWidget {
                     ? 'Awaiting manual measurement'
                     : litres(store.tankAvailable(t)),
               ),
-              _labelValue(
-                'Tank maximum capacity',
-                litres(store.tankCapacity(t)),
-              ),
+              _labelValue('Tank size in litres', litres(store.tankCapacity(t))),
               _labelValue(
                 'Manual water-height reading',
                 '${t['lastMeasuredAt'] ?? ''}'.isEmpty
@@ -2483,7 +2481,7 @@ class TanksPage extends StatelessWidget {
             ),
             const SizedBox(height: 9),
             const Text(
-              'Enter the vertical water depth using a ruler/dipstick. Never guess a sensor reading.',
+              'Measure the water height from the bottom of the tank in cm. Use a ruler or dipstick; do not guess.',
               style: TextStyle(fontSize: 11, color: Colors.black54),
             ),
           ],
@@ -2672,7 +2670,7 @@ class RequestsPage extends StatelessWidget {
     final list = store.visibleRequests;
     return ScreenBody(
       title: 'Water requests',
-      subtitle: 'Members request extra litres. Worker reviews and records actual supply.',
+      subtitle: 'Ask for water. Staff approve it, then a worker records the delivery.',
       action: FilledButton.icon(
         onPressed: () => _request(context),
         icon: const Icon(Icons.add),
@@ -2727,12 +2725,12 @@ class RequestsPage extends StatelessWidget {
                   '${formatter.format(nval(r['litresPerPerson']))} L / person or load',
                 ),
                 _labelValue(
-                  'Requested quantity',
+                  'Litres requested',
                   litres(nval(r['quantityLitres'])),
                 ),
                 if (r['status'] == 'approved' || r['status'] == 'fulfilled')
                   _labelValue(
-                    'Approved quantity',
+                    'Litres approved',
                     litres(nval(r['approvedLitres'])),
                   ),
                 if ('${r['room'] ?? ''}'.isNotEmpty)
@@ -2781,7 +2779,7 @@ class RequestsPage extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 12),
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.local_shipping_outlined),
-                      label: const Text('Confirm water supplied'),
+                      label: const Text('Mark delivered'),
                       onPressed: () => execute(
                         context,
                         () => store.fulfillRequest('${r['id']}'),
@@ -2794,7 +2792,7 @@ class RequestsPage extends StatelessWidget {
           ),
         if (store.isStaff)
           const InfoBanner(
-            '“Supplied” means the worker manually confirms delivery. App does not control pumps/valves or independently verify water volume.',
+            'Mark delivered only after giving the water. The app does not operate pumps or check delivery automatically.',
           ),
       ],
     );
@@ -3240,8 +3238,7 @@ class NoticesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ScreenBody(
     title: 'Campus announcements',
-    subtitle:
-        'Admin water shortage alerts and location-wide supply information.',
+    subtitle: 'Water updates from your campus Admin.',
     action: store.isAdmin
         ? FilledButton.icon(
             onPressed: () => _send(context),
