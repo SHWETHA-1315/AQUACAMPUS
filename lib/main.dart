@@ -584,16 +584,15 @@ class _AppShellState extends State<AppShell> {
                           const TextStyle(color: Colors.black54, fontSize: 14)))
             ]),
             actions: [
-              Tooltip(
-                message: s.backendConnected
-                    ? 'Firebase synchronized' : 'Waiting for Firebase',
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Icon(
-                    s.backendConnected ? Icons.cloud_done_rounded
-                        : Icons.cloud_sync_outlined,
-                    color: s.backendConnected ? sea : amber,
-                  ),
+              IconButton(
+                tooltip: s.backendConnected
+                    ? 'Firebase synchronized · tap to refresh'
+                    : 'Waiting for Firebase · tap to reconnect',
+                onPressed: s.retrySync,
+                icon: Icon(
+                  s.backendConnected ? Icons.cloud_done_rounded
+                      : Icons.cloud_sync_outlined,
+                  color: s.backendConnected ? sea : amber,
                 ),
               ),
               IconButton(
@@ -907,7 +906,7 @@ class OverviewPage extends StatelessWidget {
         children: [
           if (!s.backendConnected)
             const InfoBanner(
-              'Waiting for a fresh campus database connection. Edits are disabled until Firebase responds.',
+              'Waiting for a fresh campus database connection. Edits are disabled until Firebase responds. Tap the cloud icon above to retry.',
               warning: true,
             ),
           if (s.isStaff && activeSOS > 0)
