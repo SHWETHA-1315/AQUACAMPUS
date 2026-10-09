@@ -55,7 +55,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('People & roles'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('To add faculty:'), findsOneWidget);
+    expect(find.textContaining('To add a student, teacher, warden or water worker:'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
