@@ -40,15 +40,62 @@ Open the existing [Firebase project overview](https://console.firebase.google.co
 
 **Important:** An uploaded `google-services.json` is an app configuration file (not an Admin SDK credential). Never share your Google password, private service-account keys or access/refresh tokens.
 
-## First trusted Admin
+## Two trusted, equally privileged Administrators
 
-The first Admin must be granted from a trusted Firebase account; a new user cannot award themselves privileged access.
+**Status:** This repository now supports two protected Admin accounts; the real
+accounts are NOT activated automatically by installing the APK. Activation
+requires the Firebase project owner's cloud authorization and **two distinct,
+registered, email-verified accounts**. No one can self-approve.
 
-1. Install the **Firebase-connected** Android APK. Register the intended administrator's email and choose a strong password **on the mobile app**.
-2. In Firebase Console → Authentication → Users, find the new user's **UID**.
-3. Firebase Console → Firestore Database → Data → `users` → `<UID>`. Edit the registered user's Firestore profile to set `approved` (boolean) = `true` and `role` (string) = `admin`. Keep `campusId = main`, `email` and the user's UID unchanged.
-4. Sign out and back into the Android app. The admin creates real buildings/hostels and tanks, assigns workers/students/wardens/teachers, enters floor/room counts and sets low-water policy thresholds.
-5. All other registered users begin as `approved=false`, role `student`. Admin reviews and assigns their correct roles/facilities/rooms.
+1. Install the Firebase-connected APK on two phones. Each intended Admin
+   registers a **different real email address** in the app. Confirm both email
+   verification links; check the exact address displayed on the verification
+   screen and the Spam folder if the mail does not arrive.
+2. The Firebase owner authorizes deployment to `aquacampus-ed284` and deploys
+   `auth,firestore:rules`. An emulator pass or APK build is not production
+   deployment. Review existing rules first, because deployment replaces them.
+3. Run this on a trusted owner laptop with Google ADC credentials and a working
+   `firebase-admin` Python installation:
+   ```powershell
+   python tools/activate_two_admins.py --email-one "FIRST_REAL_EMAIL" --email-two "SECOND_REAL_EMAIL"
+   ```
+   The script validates both Firebase Authentication identities, email
+   verification, exact matching Firestore user profiles and any existing Admins.
+   It then approves the pair atomically (or leaves already-activated profiles
+   unchanged). It refuses to replace a third person who is already an Admin.
+4. Alternatively, the owner configures the GitHub `firebase-production`
+   environment with secure Workload Identity variables
+   `FIREBASE_WIF_PROVIDER` and `FIREBASE_DEPLOY_SERVICE_ACCOUNT`. Manually run
+   **Deploy AQUACAMPUS Firebase Cloud Backend** with
+   `project=aquacampus-ed284` and both confirmed Admin emails. The workflow
+   must pass its read-only live audit.
+5. Each Admin then signs out/back in. Both Admins can access Members, Buildings,
+   Tanks, Requests, SOS, Notices, and water planning. They can assign and
+   approve Student/Teacher/Warden/Worker accounts, but **cannot remove their
+   fellow Admin or grant a third Admin from the app**. Such account changes
+   require trusted Firebase owner action.
+6. Run a read-only audit on an owner-authorized computer:
+   ```powershell
+   python tools/check_production_ready.py --admin-one "FIRST_REAL_EMAIL" --admin-two "SECOND_REAL_EMAIL"
+   ```
+   This checks the live deployed rules and both active Admin identities. It is
+   **not** a substitute for Android real-phone end-to-end tests.
+
+All other members register independently and start as pending Students. Both
+Admins can select the correct role and assign their facility/room after the
+person's email is verified. Never upload Admin SDK JSON keys or share passwords.
+
+## Acceptance status — not evidence of production completion
+
+- GitHub build and Flutter unit tests verify compilable app code.
+- Local Firebase emulator tests verify role/security behavior against mock users.
+- The owner-authorized deployment workflow must complete successfully; before
+  that the real Firestore rules, Auth provider setup and two Admins are **not confirmed**.
+- The optional read-only live audit verifies the deployed rules and both real Admin accounts.
+- A separate two-device test is required to establish that a Student request is received
+  by a Worker/Admin, updated to fulfilled, that staff tank readings sync instantly,
+  that Teacher/Warden scoping works, and that SOS/Notices propagate. No app code
+  can confirm email delivery to a real user's inbox.
 
 ## Required two-phone acceptance test
 
