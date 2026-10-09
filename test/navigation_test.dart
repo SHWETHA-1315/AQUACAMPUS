@@ -40,6 +40,7 @@ void main() {
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
     expect(find.text('Sign out'), findsOneWidget);
+    await tester.ensureVisible(find.text('People & roles'));
     await tester.tap(find.text('People & roles'));
     await tester.pumpAndSettle();
     expect(find.textContaining('To add faculty:'), findsOneWidget);

@@ -590,10 +590,10 @@ class ApprovalPage extends StatelessWidget {
             const SizedBox(height: 18),
             Text(
               store.emailVerified ? 'Waiting for Admin' : 'Verify your email',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               store.emailVerified
                   ? 'Admin will approve your account and assign your role and building.'
                   : 'Open the link in your email, then come back and tap the button below.',
@@ -1645,7 +1645,7 @@ class PlannerPage extends StatelessWidget {
             );
           },
         ),
-        const SectionTitle('Facility demand and supply'),
+        const SectionTitle('Water needed and available'),
         if (s.visibleFacilities.isEmpty)
           _empty('Awaiting location assignment from admin.'),
         for (final f in s.visibleFacilities)
@@ -2027,7 +2027,7 @@ class FacilitiesPage extends StatelessWidget {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Edit campus water policy'),
+        title: const Text('Edit building details'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2066,7 +2066,7 @@ class FacilitiesPage extends StatelessWidget {
                     decimal: true,
                   ),
                   decoration: const InputDecoration(
-                    labelText: 'Essential litres per resident/day',
+                    labelText: 'Basic water per person / day (L)',
                   ),
                 ),
               ],
@@ -2239,7 +2239,7 @@ class FacilitiesPage extends StatelessWidget {
                     controller: cap,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: 'Daily water cap (litres)',
+                      labelText: 'Daily water limit (L)',
                     ),
                   ),
                 ],
@@ -2347,7 +2347,7 @@ class TanksPage extends StatelessWidget {
       ),
       if (store.visibleTanks.isEmpty)
         _empty(
-          'No tanks yet. Admin can add a tank and worker can record its height.',
+          'No tanks yet. Add a building first, then tap Add tank. Admin or worker can enter the water level.',
         ),
       for (final t in store.visibleTanks)
         Surface(
@@ -2666,8 +2666,8 @@ class RequestsPage extends StatelessWidget {
       children: [
         InfoBanner(
           store.isStaff
-              ? 'Approve requests first, then mark water as supplied. Canteen allocations are checked against the daily cap.'
-              : 'Bathing, laundry, room cleaning and other additional demands are estimates. Requests do not trigger physical valves.',
+              ? 'Approve a request first. After supplying water, tap Mark delivered. Canteen requests must stay within its daily water limit.'
+              : 'Choose an activity and enter how much water you need. Staff will review your request.',
         ),
         if (list.isEmpty)
           _empty(
@@ -2933,7 +2933,7 @@ class RequestsPage extends StatelessWidget {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Approve water allocation'),
+        title: const Text('Approve water request'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3025,12 +3025,12 @@ class SOSPage extends StatelessWidget {
                 const Icon(Icons.privacy_tip_outlined, color: sea, size: 36),
                 const SizedBox(height: 12),
                 const Text(
-                  'Private emergency channel',
+                  'Report to water staff',
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 7),
                 const Text(
-                  'Students, teachers and wardens may SUBMIT a location-specific SOS. Only worker/admin accounts can VIEW or resolve incident details.',
+                  'Tell us where the problem is. Admin and water workers can read your report and mark it fixed.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
@@ -3237,7 +3237,7 @@ class NoticesPage extends StatelessWidget {
     children: [
       if (store.isAdmin)
         const InfoBanner(
-          'Admin broadcasts appear on the notice feed of members using the app. To notify devices when closed, Firebase Cloud Messaging setup is required.',
+          'People can read these notices when they open the app.',
         ),
       if (store.visibleNotices.isEmpty) _empty('No messages yet'),
       for (final n in store.visibleNotices)
@@ -3374,7 +3374,7 @@ class MembersPage extends StatelessWidget {
                 style: const TextStyle(fontSize: 11, color: Colors.black54),
               ),
               _labelValue('Role', '${p['role']}'),
-              _labelValue('Facility', store.facilityName('${p['facilityId']}')),
+              _labelValue('Building', store.facilityName('${p['facilityId']}')),
               if (p['id'] != store.uid)
                 Align(
                   alignment: Alignment.centerRight,
