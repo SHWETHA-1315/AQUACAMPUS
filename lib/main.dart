@@ -15,9 +15,10 @@ const oceanBlue = Color(0xFF074E99);
 final formatter = NumberFormat('#,##0.#');
 String litres(num value) => '${formatter.format(value)} L';
 String briefTime(dynamic value) {
+  if (value == null || '$value'.trim().isEmpty) return 'Not recorded';
   final d = DateTime.tryParse('$value');
   return d == null
-      ? 'Just now'
+      ? 'Unknown time'
       : DateFormat('dd MMM, h:mm a').format(d.toLocal());
 }
 
@@ -32,9 +33,7 @@ class AquaApp extends StatelessWidget {
   const AquaApp({super.key, required this.store});
   final CampusStore store;
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-      animation: store,
-      builder: (context, _) => MaterialApp(
+  Widget build(BuildContext context) => MaterialApp(
             title: 'AQUACAMPUS',
             debugShowCheckedModeBanner: false,
             theme: ThemeData(
@@ -70,16 +69,20 @@ class AquaApp extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(17),
                         side: const BorderSide(color: Color(0xFFCEE8F8))))),
-            home: store.loading
-                ? const Scaffold(body: Center(child: CircularProgressIndicator()))
-                : !store.cloud
-                    ? BackendRequiredPage(store: store)
-                    : !store.signedIn
-                        ? EntryPage(store: store)
-                        : !store.approved
-                            ? ApprovalPage(store: store)
-                            : AppShell(store: store),
-          ));
+            // Preserve Navigator and ThemeData while Firestore streams update.
+            home: AnimatedBuilder(
+              animation: store,
+              builder: (context, _) => store.loading
+                  ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+                  : !store.cloud
+                      ? BackendRequiredPage(store: store)
+                      : !store.signedIn
+                          ? EntryPage(store: store)
+                          : !store.approved
+                              ? ApprovalPage(store: store)
+                              : AppShell(store: store),
+            ),
+          );
 }
 
 class EntryPage extends StatefulWidget {
@@ -666,7 +669,10 @@ class _AppShellState extends State<AppShell> {
                     ]),
                   Expanded(child: body),
                 ])),
-        bottomNavigationBar: NavigationBar(
+        bottomNavigationBar: !['Overview', 'Requests', 'SOS', 'Tanks']
+                .contains(current)
+            ? null
+            : NavigationBar(
             height: 72,
             backgroundColor: Colors.white,
             indicatorColor: const Color(0xFFD7F0FF),
@@ -948,8 +954,14 @@ class OverviewPage extends StatelessWidget {
                   Text('${target['name']}',
                       style: const TextStyle(
                           fontWeight: FontWeight.w800, fontSize: 16)),
-                  _labelValue('Measured/estimated stored volume',
-                      litres(s.availableFor('${target['id']}'))),
+                  _labelValue(
+                    'Measured/estimated stored volume',
+                    s.tanks.any((t) =>
+                        t['facilityId'] == target['id'] &&
+                        '${t['lastMeasuredAt'] ?? ''}'.isNotEmpty)
+                        ? litres(s.availableFor('${target['id']}'))
+                        : 'Awaiting a worker measurement',
+                  ),
                   _labelValue('Registered population estimate',
                       '${target['occupants']}'),
                   _labelValue('Indicative share (15% reserve)', litres(share)),
@@ -1327,8 +1339,14 @@ class FacilitiesPage extends StatelessWidget {
                       if (type == 'hostel')
                         _labelValue('Essential planning baseline',
                           '${formatter.format(store.essentialRate(f))} L / resident / day'),
-                      _labelValue('Estimated tank water',
-                          litres(store.availableFor('${f['id']}'))),
+                      _labelValue(
+                        'Water from manual measurement',
+                        store.tanks.any((tank) =>
+                            tank['facilityId'] == f['id'] &&
+                            '${tank['lastMeasuredAt'] ?? ''}'.isNotEmpty)
+                            ? litres(store.availableFor('${f['id']}'))
+                            : 'No measured depth yet',
+                      ),
                     ])),
             ],
           ]);
