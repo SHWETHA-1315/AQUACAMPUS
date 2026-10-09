@@ -928,9 +928,15 @@ class OverviewPage extends StatelessWidget {
                   width: item,
                   child: MetricBox(
                     'Measured tank estimate',
-                    s.visibleTanks.any((t) =>
-                        '${t['lastMeasuredAt'] ?? ''}'.isNotEmpty)
-                        ? litres(available) : 'Awaiting input',
+                    s.visibleTanks.isEmpty
+                        ? 'No registered tanks'
+                        : s.visibleTanks.every((t) =>
+                            '${t['lastMeasuredAt'] ?? ''}'.isNotEmpty)
+                            ? litres(available)
+                            : s.visibleTanks.any((t) =>
+                                '${t['lastMeasuredAt'] ?? ''}'.isNotEmpty)
+                                ? 'Partial · ${litres(available)}'
+                                : 'Awaiting input',
                     Icons.water_drop,
                   )),
               SizedBox(
@@ -962,15 +968,13 @@ class OverviewPage extends StatelessWidget {
                           fontWeight: FontWeight.w800, fontSize: 16)),
                   _labelValue(
                     'Measured/estimated stored volume',
-                    s.tanks.any((t) =>
-                        t['facilityId'] == target['id'] &&
-                        '${t['lastMeasuredAt'] ?? ''}'.isNotEmpty)
-                        ? litres(s.availableFor('${target['id']}'))
-                        : 'Awaiting a worker measurement',
+                    s.facilityWaterSummary('${target['id']}'),
                   ),
                   _labelValue('Registered population estimate',
                       '${target['occupants']}'),
-                  _labelValue('Indicative share (15% reserve)', litres(share)),
+                  _labelValue('Indicative share (15% reserve)',
+                      s.hasCompleteReadingsFor('${target['id']}')
+                          ? litres(share) : 'Requires all tank readings'),
                   const SizedBox(height: 12),
                   const Text(
                       'Informational planning figure, NOT an enforced personal allowance. Drinking and essential hygiene must be prioritised.',
@@ -995,11 +999,7 @@ class OverviewPage extends StatelessWidget {
                     StatusPill('${f['type']}')
                   ]),
                   _labelValue('Water from staff measurements',
-                    s.tanks.any((t) =>
-                      t['facilityId'] == f['id'] &&
-                      '${t['lastMeasuredAt'] ?? ''}'.isNotEmpty)
-                    ? litres(s.availableFor('${f['id']}'))
-                    : 'Not measured yet'),
+                    s.facilityWaterSummary('${f['id']}')),
                   if (f['type'] == 'canteen')
                     _labelValue('Today supplied / allowed',
                         '${litres(s.dailyUsed('${f['id']}'))} / ${litres(nval(f['dailyCapLitres']))}'),
@@ -1008,9 +1008,7 @@ class OverviewPage extends StatelessWidget {
                 ])),
           const SectionTitle('Automatic in-app low-water warnings'),
           for (final f in myFacilities)
-            if (s.tanks.any((t) =>
-                    t['facilityId'] == f['id'] &&
-                    '${t['lastMeasuredAt'] ?? ''}'.isNotEmpty) &&
+            if (s.hasCompleteReadingsFor('${f['id']}') &&
                 s.availableFor('${f['id']}') <= s.lowWaterThreshold(f))
               InfoBanner(
                 '${f['name']}: about ${litres(s.availableFor('${f['id']}'))} remaining, below the configured ${litres(s.lowWaterThreshold(f))} threshold. '
@@ -1152,18 +1150,17 @@ class PlannerPage extends StatelessWidget {
         .fold<double>(
             0, (sum, r) => sum + nval(r['quantityLitres']).toDouble());
     final residents = f['type'] == 'hostel' ? nval(f['occupants']).toInt() : 0;
-    final hasRecordedLevel = store.tanks.any((tank) =>
-        tank['facilityId'] == id &&
-        '${tank['lastMeasuredAt'] ?? ''}'.isNotEmpty);
-    if (!hasRecordedLevel) {
+    if (!store.hasCompleteReadingsFor(id)) {
       return Surface(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('${f['name']}',
             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
           const SizedBox(height: 9),
-          const Text('No measured tank level. Ask your water worker to record a reading before using the shortage forecast.',
-            style: TextStyle(color: Colors.black54)),
+          Text(store.tanksFor(id).isEmpty
+              ? 'No registered tanks for this location. Ask your Admin to add a real tank before forecasting.'
+              : 'Water forecast unavailable: ${store.missingReadingsFor(id)} of ${store.tanksFor(id).length} tank(s) need a worker measurement.',
+            style: const TextStyle(color: Colors.black54)),
         ],
       ));
     }
@@ -1347,11 +1344,7 @@ class FacilitiesPage extends StatelessWidget {
                           '${formatter.format(store.essentialRate(f))} L / resident / day'),
                       _labelValue(
                         'Water from manual measurement',
-                        store.tanks.any((tank) =>
-                            tank['facilityId'] == f['id'] &&
-                            '${tank['lastMeasuredAt'] ?? ''}'.isNotEmpty)
-                            ? litres(store.availableFor('${f['id']}'))
-                            : 'No measured depth yet',
+                        store.facilityWaterSummary('${f['id']}'),
                       ),
                     ])),
             ],
