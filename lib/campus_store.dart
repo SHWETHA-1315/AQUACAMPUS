@@ -16,7 +16,7 @@ const activityNames = [
   'Room cleaning',
   'Cooking',
   'Utensil washing',
-  'Other'
+  'Other',
 ];
 const campusId = 'main';
 // The only authorized Firebase backend for this AQUACAMPUS deployment.
@@ -42,14 +42,18 @@ class CampusStore extends ChangeNotifier {
   StreamSubscription<dynamic>? _dailyUsageSubscription;
   Timer? _dayRolloverTimer;
   String _currentUsageDay = dateKey();
+  int _authGeneration = 0;
 
   /// Every active feed must have delivered a fresh, server-backed snapshot.
   bool get backendConnected =>
-      cloud && signedIn && approved && _streamOnline.isNotEmpty &&
+      cloud &&
+      signedIn &&
+      approved &&
+      _streamOnline.isNotEmpty &&
       _streamOnline.values.every((online) => online);
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
-      _profileSubscription;
+  _profileSubscription;
 
   String get role => '${user['role'] ?? 'student'}';
   String get name => '${user['name'] ?? 'Campus member'}';
@@ -85,8 +89,9 @@ class CampusStore extends ChangeNotifier {
     try {
       await Firebase.initializeApp(options: AquaCampusFirebaseConfig.options);
       cloud = true;
-      FirebaseFirestore.instance.settings =
-          const Settings(persistenceEnabled: false);
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: false,
+      );
       _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
         _onAuth,
         onError: (Object error) {
@@ -118,32 +123,33 @@ class CampusStore extends ChangeNotifier {
 
   String facilityName(String id) => '${facility(id)?['name'] ?? 'Unassigned'}';
   double tankCapacity(Map<String, dynamic> item) => WaterMath.capacityLitres(
-        shape: '${item['shape']}',
-        heightCm: nval(item['heightCm']).toDouble(),
-        lengthCm: nval(item['lengthCm']).toDouble(),
-        widthCm: nval(item['widthCm']).toDouble(),
-        diameterCm: nval(item['diameterCm']).toDouble(),
-      );
+    shape: '${item['shape']}',
+    heightCm: nval(item['heightCm']).toDouble(),
+    lengthCm: nval(item['lengthCm']).toDouble(),
+    widthCm: nval(item['widthCm']).toDouble(),
+    diameterCm: nval(item['diameterCm']).toDouble(),
+  );
   double tankAvailable(Map<String, dynamic> item) => WaterMath.availableLitres(
-        shape: '${item['shape']}',
-        heightCm: nval(item['heightCm']).toDouble(),
-        waterHeightCm: nval(item['waterHeightCm']).toDouble(),
-        lengthCm: nval(item['lengthCm']).toDouble(),
-        widthCm: nval(item['widthCm']).toDouble(),
-        diameterCm: nval(item['diameterCm']).toDouble(),
-      );
+    shape: '${item['shape']}',
+    heightCm: nval(item['heightCm']).toDouble(),
+    waterHeightCm: nval(item['waterHeightCm']).toDouble(),
+    lengthCm: nval(item['lengthCm']).toDouble(),
+    widthCm: nval(item['widthCm']).toDouble(),
+    diameterCm: nval(item['diameterCm']).toDouble(),
+  );
   List<Map<String, dynamic>> tanksFor(String facilityId) =>
       tanks.where((t) => t['facilityId'] == facilityId).toList();
 
   bool hasCompleteReadingsFor(String facilityId) {
     final assigned = tanksFor(facilityId);
-    return assigned.isNotEmpty && assigned.every(
-        (tank) => '${tank['lastMeasuredAt'] ?? ''}'.isNotEmpty);
+    return assigned.isNotEmpty &&
+        assigned.every((tank) => '${tank['lastMeasuredAt'] ?? ''}'.isNotEmpty);
   }
 
-  int missingReadingsFor(String facilityId) => tanksFor(facilityId)
-      .where((tank) => '${tank['lastMeasuredAt'] ?? ''}'.isEmpty)
-      .length;
+  int missingReadingsFor(String facilityId) =>
+      tanksFor(facilityId)
+          .where((tank) => '${tank['lastMeasuredAt'] ?? ''}'.isEmpty)
+          .length;
 
   String facilityWaterSummary(String facilityId) {
     final assigned = tanksFor(facilityId);
@@ -166,32 +172,39 @@ class CampusStore extends ChangeNotifier {
       .where((f) => f['type'] == 'hostel')
       .fold(0, (a, f) => a + nval(f['occupants']).toInt());
   List<Map<String, dynamic>> get visibleFacilities => facilities.where((f) {
-        if (isStaff) return true;
-        if (isStudent || isWarden) return f['id'] == myFacilityId;
-        if (isTeacher) return f['type'] == 'college' || f['type'] == 'canteen';
-        return false;
-      }).toList();
-  List<Map<String, dynamic>> get visibleRequests => requests.where((r) {
-        if (isStaff) return true;
-        if (isWarden) return r['facilityId'] == myFacilityId;
-        return r['requestedBy'] == uid;
-      }).toList()
+    if (isStaff) return true;
+    if (isStudent || isWarden) return f['id'] == myFacilityId;
+    if (isTeacher) return f['type'] == 'college' || f['type'] == 'canteen';
+    return false;
+  }).toList();
+  List<Map<String, dynamic>> get visibleRequests =>
+      requests.where((r) {
+          if (isStaff) return true;
+          if (isWarden) return r['facilityId'] == myFacilityId;
+          return r['requestedBy'] == uid;
+        }).toList()
         ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
-  List<Map<String, dynamic>> get visibleNotices => notices
-      .where((n) =>
-          '${n['targetFacilityId'] ?? ''}'.isEmpty ||
-          isStaff ||
-          n['targetFacilityId'] == myFacilityId ||
-          (isTeacher &&
-              ['college', 'canteen'].contains(
-                  facility('${n['targetFacilityId']}')?['type'])))
-      .toList()
-    ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
+  List<Map<String, dynamic>> get visibleNotices =>
+      notices
+          .where(
+            (n) =>
+                '${n['targetFacilityId'] ?? ''}'.isEmpty ||
+                isStaff ||
+                n['targetFacilityId'] == myFacilityId ||
+                (isTeacher &&
+                    [
+                      'college',
+                      'canteen',
+                    ].contains(facility('${n['targetFacilityId']}')?['type'])),
+          )
+          .toList()
+        ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
   List<Map<String, dynamic>> get visibleTanks {
     if (isStaff) return tanks;
     final allowedIds = visibleFacilities.map((f) => f['id']).toSet();
     return tanks.where((t) => allowedIds.contains(t['facilityId'])).toList();
   }
+
   double dailyUsed(String facilityId) => dailyUsage
       .where((u) => u['facilityId'] == facilityId && u['day'] == dateKey())
       .fold(0.0, (a, u) => a + nval(u['usedLitres']).toDouble());
@@ -199,7 +212,11 @@ class CampusStore extends ChangeNotifier {
   /// Refresh data after Android returns from background. The device can
   /// sleep past midnight or lose connectivity while Firebase is suspended.
   void refreshOnResume() {
-    if (!signedIn || !approved || !cloud) return;
+    if (!signedIn || !cloud) return;
+    if (!approved) {
+      retrySync();
+      return;
+    }
     if (_currentUsageDay != dateKey()) {
       _refreshDailyUsageStream();
       _scheduleDayRollover();
@@ -265,7 +282,8 @@ class CampusStore extends ChangeNotifier {
   }
 
   Future<void> sendPasswordReset(String email) async {
-    if (!cloud) throw StateError('Campus Firebase authentication is unavailable');
+    if (!cloud)
+      throw StateError('Campus Firebase authentication is unavailable');
     final address = email.trim();
     if (address.isEmpty || !address.contains('@')) {
       throw StateError('Enter your registered email address first');
@@ -273,15 +291,21 @@ class CampusStore extends ChangeNotifier {
     await FirebaseAuth.instance.sendPasswordResetEmail(email: address);
   }
 
-  Future<void> emailLogin(String email, String password,
-      {bool create = false, String name = ''}) async {
+  Future<void> emailLogin(
+    String email,
+    String password, {
+    bool create = false,
+    String name = '',
+  }) async {
     if (!cloud) throw StateError('Firebase not configured');
     if (create) {
       if (name.trim().length < 2 || name.trim().length > 120) {
         throw StateError('Enter a valid full name (2–120 characters).');
       }
       final result = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: email.trim(), password: password);
+        email: email.trim(),
+        password: password,
+      );
       // New members are ALWAYS pending students. Only admin may elevate a role.
       await _users.doc(result.user!.uid).set({
         'name': name.trim(),
@@ -291,7 +315,7 @@ class CampusStore extends ChangeNotifier {
         'room': '',
         'approved': false,
         'campusId': campusId,
-        'createdAt': timestamp()
+        'createdAt': timestamp(),
       });
       // Verify ownership of the email before a trusted Firebase administrator
       // can approve this account. Verification is a real Firebase email.
@@ -300,12 +324,15 @@ class CampusStore extends ChangeNotifier {
       } on FirebaseAuthException catch (error) {
         // Account and Firestore profile already exist; do not falsely report
         // the registration as failed. User may resend from Pending screen.
-        message = 'Account created. Email verification not sent: ${error.message}';
+        message =
+            'Account created. Email verification not sent: ${error.message}';
         notifyListeners();
       }
     } else {
-      await FirebaseAuth.instance
-          .signInWithEmailAndPassword(email: email.trim(), password: password);
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
     }
   }
 
@@ -335,7 +362,8 @@ class CampusStore extends ChangeNotifier {
     _profileSubscription = null;
   }
 
-  void _onAuth(User? authUser) {
+  Future<void> _onAuth(User? authUser) async {
+    final generation = ++_authGeneration;
     _clearSubscriptions();
     if (authUser == null) {
       signedIn = false;
@@ -343,91 +371,129 @@ class CampusStore extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    // Reload verification and refresh the token BEFORE campus listeners start.
+    // Firestore checks the token claim, not just the local User flag.
+    try {
+      await authUser.reload();
+      if (generation != _authGeneration) return;
+      final current = FirebaseAuth.instance.currentUser;
+      if (current == null || current.uid != authUser.uid) return;
+      await current.getIdToken(true);
+      if (generation != _authGeneration) return;
+    } catch (error) {
+      if (generation != _authGeneration) return;
+      signedIn = true;
+      user = {'id': authUser.uid, 'approved': false, 'name': authUser.email};
+      message = 'Cannot check your account. Check your internet and try again.';
+      debugPrint('Account refresh failed: $error');
+      notifyListeners();
+      return;
+    }
+    message = null;
     signedIn = true;
     user = {
       'id': authUser.uid,
       'role': 'student',
       'name': authUser.email ?? 'Member',
-      'approved': false
+      'approved': false,
     };
     notifyListeners();
-    _profileSubscription =
-        _users.doc(authUser.uid).snapshots().listen((snapshot) {
-      final newData = snapshot.data();
-      if (newData == null) {
-        for (final subscription in _subscriptions) {
-          subscription.cancel();
-        }
-        _subscriptions.clear();
-        _clearCampusData();
-        user = {
-          'id': authUser.uid,
-          'role': 'student',
-          'name': 'Awaiting profile',
-          'approved': false
-        };
-        notifyListeners();
-        return;
-      }
-      final oldApproved = approved;
-      final oldRole = role;
-      final oldFacility = myFacilityId;
-      user = {...newData, 'id': snapshot.id};
-      if (approved &&
-          (!oldApproved ||
-              oldRole != role ||
-              oldFacility != myFacilityId ||
-              _subscriptions.isEmpty)) {
-        for (final s in _subscriptions) {
-          s.cancel();
-        }
-        _subscriptions.clear();
-        _clearCampusData();
-        _subscribeCloud();
-      } else if (!approved) {
-        for (final s in _subscriptions) {
-          s.cancel();
-        }
-        _subscriptions.clear();
-        _clearCampusData();
-      }
-      notifyListeners();
-    }, onError: (Object e) {
-      for (final subscription in _subscriptions) {
-        subscription.cancel();
-      }
-      _subscriptions.clear();
-      _clearCampusData();
-      user = {...user, 'approved': false};
-      message = 'Profile read failed: $e';
-      notifyListeners();
-    });
+    _profileSubscription = _users
+        .doc(authUser.uid)
+        .snapshots()
+        .listen(
+          (snapshot) {
+            if (generation != _authGeneration) return;
+            final newData = snapshot.data();
+            if (newData == null) {
+              for (final subscription in _subscriptions) {
+                subscription.cancel();
+              }
+              _subscriptions.clear();
+              _clearCampusData();
+              user = {
+                'id': authUser.uid,
+                'role': 'student',
+                'name': 'Awaiting profile',
+                'approved': false,
+              };
+              notifyListeners();
+              return;
+            }
+            final oldApproved = approved;
+            final oldRole = role;
+            final oldFacility = myFacilityId;
+            user = {...newData, 'id': snapshot.id};
+            if (approved &&
+                (!oldApproved ||
+                    oldRole != role ||
+                    oldFacility != myFacilityId ||
+                    _subscriptions.isEmpty)) {
+              for (final s in _subscriptions) {
+                s.cancel();
+              }
+              _subscriptions.clear();
+              _clearCampusData();
+              _subscribeCloud();
+            } else if (!approved) {
+              for (final s in _subscriptions) {
+                s.cancel();
+              }
+              _subscriptions.clear();
+              _clearCampusData();
+            }
+            notifyListeners();
+          },
+          onError: (Object e) {
+            if (generation != _authGeneration) return;
+            for (final subscription in _subscriptions) {
+              subscription.cancel();
+            }
+            _subscriptions.clear();
+            _clearCampusData();
+            user = {...user, 'approved': false};
+            debugPrint('Profile read failed: $e');
+            message = 'Cannot load your account. Please try again.';
+            notifyListeners();
+          },
+        );
   }
 
   StreamSubscription<dynamic> _watch(
-      String collection, void Function(List<Map<String, dynamic>>) handle,
-      [Query<Map<String, dynamic>>? query]) {
+    String collection,
+    void Function(List<Map<String, dynamic>>) handle, [
+    Query<Map<String, dynamic>>? query,
+  ]) {
+    final generation = _authGeneration;
     final source = query ?? _col(collection);
     _streamOnline[collection] = false;
-    final subscription = source.snapshots(includeMetadataChanges: true).listen(
-      (snapshot) {
-        _streamOnline[collection] =
-            !snapshot.metadata.isFromCache && !snapshot.metadata.hasPendingWrites;
-        handle(snapshot.docs
-            .map((doc) => {...doc.data(), 'id': doc.id}).toList());
-        if (message?.startsWith('$collection sync failed:') ?? false) {
-          message = null;
-        }
-        notifyListeners();
-      },
-      onError: (Object error) {
-        _streamOnline[collection] = false;
-        // A failed listener must not leave stale campus records on screen.
-        handle([]);
-        message = '$collection sync failed: $error';
-        notifyListeners();
-      },
-    );
+    final subscription = source
+        .snapshots(includeMetadataChanges: true)
+        .listen(
+          (snapshot) {
+            if (generation != _authGeneration) return;
+            _streamOnline[collection] =
+                !snapshot.metadata.isFromCache &&
+                !snapshot.metadata.hasPendingWrites;
+            handle(
+              snapshot.docs
+                  .map((doc) => {...doc.data(), 'id': doc.id})
+                  .toList(),
+            );
+            if (backendConnected) {
+              message = null;
+            }
+            notifyListeners();
+          },
+          onError: (Object error) {
+            if (generation != _authGeneration) return;
+            _streamOnline[collection] = false;
+            // A failed listener must not leave stale campus records on screen.
+            handle([]);
+            _connectionError(error);
+            notifyListeners();
+          },
+        );
     _subscriptions.add(subscription);
     return subscription;
   }
@@ -453,20 +519,33 @@ class CampusStore extends ChangeNotifier {
     final now = DateTime.now();
     final nextDay = DateTime(now.year, now.month, now.day + 1);
     _dayRolloverTimer = Timer(
-        nextDay.difference(now) + const Duration(milliseconds: 50), () {
-      if (!signedIn || !approved || !cloud) return;
-      _refreshDailyUsageStream();
-      _scheduleDayRollover();
-    });
+      nextDay.difference(now) + const Duration(milliseconds: 50),
+      () {
+        if (!signedIn || !approved || !cloud) return;
+        _refreshDailyUsageStream();
+        _scheduleDayRollover();
+      },
+    );
+  }
+
+  void _connectionError(Object error) {
+    debugPrint('Campus connection: $error');
+    message = error is FirebaseException && error.code == 'permission-denied'
+        ? 'Access could not be confirmed. Try again. If it continues, verify your email and ask Admin to check your account.'
+        : 'Cannot load campus data. Check your internet and try again.';
   }
 
   void _subscribeCloud() {
+    final generation = _authGeneration;
     _watch('facilities', (v) => facilities = v);
     _watch('tanks', (v) => tanks = v);
     // Recent mobile feeds are bounded. Export/long-term history requires
     // explicit paging rather than loading every document at login.
-    _watch('notices', (v) => notices = v,
-        _col('notices').orderBy('createdAt', descending: true).limit(100));
+    _watch(
+      'notices',
+      (v) => notices = v,
+      _col('notices').orderBy('createdAt', descending: true).limit(100),
+    );
     _refreshDailyUsageStream();
     _scheduleDayRollover();
     Query<Map<String, dynamic>>? requestQuery;
@@ -474,69 +553,94 @@ class CampusStore extends ChangeNotifier {
       requestQuery = _col('requests').where('requestedBy', isEqualTo: uid);
     }
     if (isWarden) {
-      requestQuery =
-          _col('requests').where('facilityId', isEqualTo: myFacilityId);
+      requestQuery = _col('requests')
+          .where('facilityId', isEqualTo: myFacilityId);
     }
     _watch('requests', (v) => requests = v, requestQuery);
     if (isStaff) {
       _watch('sos', (v) => sos = v);
-      _watch('tankReadings', (v) => tankReadings = v,
-          _col('tankReadings').orderBy('measuredAt', descending: true).limit(250));
+      _watch(
+        'tankReadings',
+        (v) => tankReadings = v,
+        _col('tankReadings').orderBy('measuredAt', descending: true).limit(250),
+      );
     }
     if (isAdmin) {
       _streamOnline['people'] = false;
-      _subscriptions.add(_users
-          .where('campusId', isEqualTo: campusId)
-          .snapshots(includeMetadataChanges: true)
-          .listen((snapshot) {
-        _streamOnline['people'] =
-            !snapshot.metadata.isFromCache && !snapshot.metadata.hasPendingWrites;
-        people =
-            snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList();
-        notifyListeners();
-      }, onError: (Object error) {
-        _streamOnline['people'] = false;
-        people = [];
-        message = 'Member sync failed: $error';
-        notifyListeners();
-      }));
+      _subscriptions.add(
+        _users
+            .where('campusId', isEqualTo: campusId)
+            .snapshots(includeMetadataChanges: true)
+            .listen(
+              (snapshot) {
+                if (generation != _authGeneration) return;
+                _streamOnline['people'] =
+                    !snapshot.metadata.isFromCache &&
+                    !snapshot.metadata.hasPendingWrites;
+                people = snapshot.docs
+                    .map((doc) => {...doc.data(), 'id': doc.id})
+                    .toList();
+                if (backendConnected) message = null;
+                notifyListeners();
+              },
+              onError: (Object error) {
+                if (generation != _authGeneration) return;
+                _streamOnline['people'] = false;
+                people = [];
+                _connectionError(error);
+                notifyListeners();
+              },
+            ),
+      );
     }
   }
 
   // Unconfigured policies are never filled with fabricated water quantities.
   double lowWaterThreshold(Map<String, dynamic> f) =>
-      f['lowWaterThresholdLitres'] == null ? 0
+      f['lowWaterThresholdLitres'] == null
+      ? 0
       : nval(f['lowWaterThresholdLitres']).toDouble().clamp(0.0, 100000000.0);
 
   double essentialRate(Map<String, dynamic> f) =>
-      f['essentialLitresPerResident'] == null ? 0
+      f['essentialLitresPerResident'] == null
+      ? 0
       : nval(f['essentialLitresPerResident']).toDouble().clamp(0.0, 1000.0);
 
   List<Map<String, dynamic>> readingHistory(String tankId) {
     final items = tankReadings.where((r) => r['tankId'] == tankId).toList();
-    items.sort((a, b) => '${b['measuredAt'] ?? ''}'.compareTo('${a['measuredAt'] ?? ''}'));
+    items.sort(
+      (a, b) =>
+          '${b['measuredAt'] ?? ''}'.compareTo('${a['measuredAt'] ?? ''}'),
+    );
     return items;
   }
 
-  Future<void> addFacility(
-      {required String name,
-      required String type,
-      required int occupants,
-      required int floors,
-      required int restrooms,
-      required double dailyCapLitres,
-      required double lowWaterThresholdLitres,
-      required double essentialLitresPerResident}) async {
+  Future<void> addFacility({
+    required String name,
+    required String type,
+    required int occupants,
+    required int floors,
+    required int restrooms,
+    required double dailyCapLitres,
+    required double lowWaterThresholdLitres,
+    required double essentialLitresPerResident,
+  }) async {
     if (!isAdmin) throw StateError('Admin access required');
-    if (name.trim().isEmpty || name.trim().length > 120 ||
+    if (name.trim().isEmpty ||
+        name.trim().length > 120 ||
         !facilityTypes.contains(type) ||
-        occupants < 0 || floors < 1 || restrooms < 0 ||
+        occupants < 0 ||
+        floors < 1 ||
+        restrooms < 0 ||
         (type == 'hostel' && occupants < 1) ||
-        !dailyCapLitres.isFinite || dailyCapLitres < 0 ||
+        !dailyCapLitres.isFinite ||
+        dailyCapLitres < 0 ||
         (type == 'canteen' && dailyCapLitres <= 0) ||
-        !lowWaterThresholdLitres.isFinite || lowWaterThresholdLitres < 0 ||
+        !lowWaterThresholdLitres.isFinite ||
+        lowWaterThresholdLitres < 0 ||
         !essentialLitresPerResident.isFinite ||
-        essentialLitresPerResident < 1 || essentialLitresPerResident > 1000) {
+        essentialLitresPerResident < 1 ||
+        essentialLitresPerResident > 1000) {
       throw StateError('Enter valid facility information and water policies.');
     }
     final item = {
@@ -548,12 +652,11 @@ class CampusStore extends ChangeNotifier {
       'dailyCapLitres': dailyCapLitres,
       'lowWaterThresholdLitres': lowWaterThresholdLitres,
       'essentialLitresPerResident': essentialLitresPerResident,
-      'createdAt': timestamp()
+      'createdAt': timestamp(),
     };
     _ensureLive();
 
-      await _col('facilities').add(item);
-    
+    await _col('facilities').add(item);
   }
 
   Future<void> updateFacility(
@@ -568,11 +671,17 @@ class CampusStore extends ChangeNotifier {
   }) async {
     if (!isAdmin) throw StateError('Admin access required');
     if (facility(id) == null) throw StateError('Facility not found');
-    if (name.trim().isEmpty || floors < 1 || restrooms < 0 ||
-        occupants < 0 || !dailyCapLitres.isFinite || dailyCapLitres < 0 ||
-        !lowWaterThresholdLitres.isFinite || lowWaterThresholdLitres < 0 ||
+    if (name.trim().isEmpty ||
+        floors < 1 ||
+        restrooms < 0 ||
+        occupants < 0 ||
+        !dailyCapLitres.isFinite ||
+        dailyCapLitres < 0 ||
+        !lowWaterThresholdLitres.isFinite ||
+        lowWaterThresholdLitres < 0 ||
         !essentialLitresPerResident.isFinite ||
-        essentialLitresPerResident < 1 || essentialLitresPerResident > 1000) {
+        essentialLitresPerResident < 1 ||
+        essentialLitresPerResident > 1000) {
       throw StateError('Invalid facility settings');
     }
     final changes = <String, dynamic>{
@@ -588,25 +697,32 @@ class CampusStore extends ChangeNotifier {
     };
     _ensureLive();
 
-      await _col('facilities').doc(id).update(changes);
-    
+    await _col('facilities').doc(id).update(changes);
   }
 
-  Future<void> addTank(
-      {required String name,
-      required String facilityId,
-      required String shape,
-      required double lengthCm,
-      required double widthCm,
-      required double heightCm,
-      required double diameterCm}) async {
+  Future<void> addTank({
+    required String name,
+    required String facilityId,
+    required String shape,
+    required double lengthCm,
+    required double widthCm,
+    required double heightCm,
+    required double diameterCm,
+  }) async {
     if (!isAdmin) throw StateError('Admin access required');
-    if (name.trim().isEmpty || name.trim().length > 120 ||
+    if (name.trim().isEmpty ||
+        name.trim().length > 120 ||
         facility(facilityId) == null ||
         !['rect', 'cylinder'].contains(shape) ||
-        !heightCm.isFinite || heightCm <= 0 || heightCm > 100000 ||
-        !lengthCm.isFinite || !widthCm.isFinite || !diameterCm.isFinite ||
-        lengthCm < 0 || widthCm < 0 || diameterCm < 0 ||
+        !heightCm.isFinite ||
+        heightCm <= 0 ||
+        heightCm > 100000 ||
+        !lengthCm.isFinite ||
+        !widthCm.isFinite ||
+        !diameterCm.isFinite ||
+        lengthCm < 0 ||
+        widthCm < 0 ||
+        diameterCm < 0 ||
         (shape == 'rect' && (lengthCm <= 0 || widthCm <= 0)) ||
         (shape == 'cylinder' && diameterCm <= 0)) {
       throw StateError('Enter valid measured tank dimensions.');
@@ -621,20 +737,21 @@ class CampusStore extends ChangeNotifier {
       'diameterCm': diameterCm,
       'waterHeightCm': 0.0,
       'lastMeasuredAt': '',
-      'createdAt': timestamp()
+      'createdAt': timestamp(),
     };
     _ensureLive();
 
-      await _col('tanks').add(item);
-    
+    await _col('tanks').add(item);
   }
 
   Future<void> recordReading(String tankId, double waterHeightCm) async {
     if (!isStaff) throw StateError('Worker/admin access required');
     final tank = tanks.firstWhere((t) => t['id'] == tankId);
     final height = nval(tank['heightCm']).toDouble();
-    if (!waterHeightCm.isFinite || waterHeightCm < 0 ||
-        height <= 0 || waterHeightCm > height) {
+    if (!waterHeightCm.isFinite ||
+        waterHeightCm < 0 ||
+        height <= 0 ||
+        waterHeightCm > height) {
       throw StateError('Water height must be within tank dimensions');
     }
     final now = timestamp();
@@ -653,23 +770,26 @@ class CampusStore extends ChangeNotifier {
     };
     _ensureLive();
 
-      final batch = _firestore.batch();
-      batch.update(_col('tanks').doc(tankId), values);
-      batch.set(_col('tankReadings').doc(), history);
-      await batch.commit();
-    
+    final batch = _firestore.batch();
+    batch.update(_col('tanks').doc(tankId), values);
+    batch.set(_col('tankReadings').doc(), history);
+    await batch.commit();
   }
 
-  Future<void> addRequest(
-      {required String facilityId,
-      required String activity,
-      required int peopleCount,
-      required double litresPerPerson,
-      required String notes}) async {
+  Future<void> addRequest({
+    required String facilityId,
+    required String activity,
+    required int peopleCount,
+    required double litresPerPerson,
+    required String notes,
+  }) async {
     if (!approved) throw StateError('You are awaiting admin approval');
-    if (peopleCount < 1 || peopleCount > 500 ||
-        !litresPerPerson.isFinite || litresPerPerson <= 0 ||
-        litresPerPerson > 1000 || !activityNames.contains(activity) ||
+    if (peopleCount < 1 ||
+        peopleCount > 500 ||
+        !litresPerPerson.isFinite ||
+        litresPerPerson <= 0 ||
+        litresPerPerson > 1000 ||
+        !activityNames.contains(activity) ||
         notes.length > 2000 ||
         !visibleFacilities.any((f) => f['id'] == facilityId)) {
       throw StateError('Invalid water request or assigned facility.');
@@ -691,23 +811,26 @@ class CampusStore extends ChangeNotifier {
       'createdAt': timestamp(),
       'approvedBy': '',
       'fulfilledBy': '',
-      'fulfilledAt': ''
+      'fulfilledAt': '',
     };
     _ensureLive();
 
-      await _col('requests').add(data);
-    
+    await _col('requests').add(data);
   }
 
-  Future<void> decideRequest(String id,
-      {required bool approve, double approvedLitres = 0}) async {
+  Future<void> decideRequest(
+    String id, {
+    required bool approve,
+    double approvedLitres = 0,
+  }) async {
     if (!isStaff) throw StateError('Worker or admin access required');
     final request = requests.firstWhere((r) => r['id'] == id);
     if (request['status'] != 'pending') {
       throw StateError('Only pending requests may be reviewed');
     }
     if (approve &&
-        (!approvedLitres.isFinite || approvedLitres <= 0 ||
+        (!approvedLitres.isFinite ||
+            approvedLitres <= 0 ||
             approvedLitres > nval(request['quantityLitres']))) {
       throw StateError('Approval must be > 0 and no more than requested');
     }
@@ -715,71 +838,73 @@ class CampusStore extends ChangeNotifier {
       'status': approve ? 'approved' : 'rejected',
       'approvedLitres': approve ? approvedLitres : 0.0,
       'approvedBy': uid,
-      'reviewedAt': timestamp()
+      'reviewedAt': timestamp(),
     };
     _ensureLive();
 
-      await _col('requests').doc(id).update(values);
-    
+    await _col('requests').doc(id).update(values);
   }
 
   Future<void> fulfillRequest(String id) async {
     if (!isStaff) throw StateError('Worker or admin access required');
     _ensureLive();
 
-      final reqRef = _col('requests').doc(id);
-      await _firestore.runTransaction((tx) async {
-        final reqDoc = await tx.get(reqRef);
-        if (!reqDoc.exists) throw StateError('Request not found');
-        final r = reqDoc.data()!;
-        if (r['status'] != 'approved') {
-          throw StateError('Only approved requests can be supplied');
+    final reqRef = _col('requests').doc(id);
+    await _firestore.runTransaction((tx) async {
+      final reqDoc = await tx.get(reqRef);
+      if (!reqDoc.exists) throw StateError('Request not found');
+      final r = reqDoc.data()!;
+      if (r['status'] != 'approved') {
+        throw StateError('Only approved requests can be supplied');
+      }
+      final amount = nval(r['approvedLitres']).toDouble();
+      if (amount <= 0) throw StateError('Invalid allocation');
+      final facilityId = '${r['facilityId']}';
+      final facRef = _col('facilities').doc(facilityId);
+      final facDoc = await tx.get(facRef);
+      if (!facDoc.exists) throw StateError('Facility unavailable');
+      final fac = facDoc.data()!;
+      DocumentReference<Map<String, dynamic>>? usageRef;
+      double nextUsed = 0;
+      if (fac['type'] == 'canteen') {
+        usageRef = _col('dailyUsage').doc('${dateKey()}_$facilityId');
+        final usedDoc = await tx.get(usageRef);
+        nextUsed = nval(usedDoc.data()?['usedLitres']).toDouble() + amount;
+        final cap = nval(fac['dailyCapLitres']).toDouble();
+        if (cap <= 0 || nextUsed > cap + 0.0001) {
+          throw StateError('Canteen daily supply limit exceeded ($cap L)');
         }
-        final amount = nval(r['approvedLitres']).toDouble();
-        if (amount <= 0) throw StateError('Invalid allocation');
-        final facilityId = '${r['facilityId']}';
-        final facRef = _col('facilities').doc(facilityId);
-        final facDoc = await tx.get(facRef);
-        if (!facDoc.exists) throw StateError('Facility unavailable');
-        final fac = facDoc.data()!;
-        DocumentReference<Map<String, dynamic>>? usageRef;
-        double nextUsed = 0;
-        if (fac['type'] == 'canteen') {
-          usageRef = _col('dailyUsage').doc('${dateKey()}_$facilityId');
-          final usedDoc = await tx.get(usageRef);
-          nextUsed = nval(usedDoc.data()?['usedLitres']).toDouble() + amount;
-          final cap = nval(fac['dailyCapLitres']).toDouble();
-          if (cap <= 0 || nextUsed > cap + 0.0001) {
-            throw StateError('Canteen daily supply limit exceeded ($cap L)');
-          }
-        }
-        // All reads above precede writes (Firestore transaction requirement).
-        if (usageRef != null) {
-          tx.set(usageRef, {
-            'facilityId': facilityId,
-            'day': dateKey(),
-            'usedLitres': nextUsed,
-            'updatedBy': uid
-          });
-        }
-        tx.update(reqRef, {
-          'status': 'fulfilled',
-          'fulfilledAt': timestamp(),
-          'fulfilledBy': uid
+      }
+      // All reads above precede writes (Firestore transaction requirement).
+      if (usageRef != null) {
+        tx.set(usageRef, {
+          'facilityId': facilityId,
+          'day': dateKey(),
+          'usedLitres': nextUsed,
+          'updatedBy': uid,
         });
+      }
+      tx.update(reqRef, {
+        'status': 'fulfilled',
+        'fulfilledAt': timestamp(),
+        'fulfilledBy': uid,
       });
-    
+    });
   }
 
-  Future<void> createSOS(
-      {required String facilityId,
-      required int floor,
-      required String restroom,
-      required String detail}) async {
+  Future<void> createSOS({
+    required String facilityId,
+    required int floor,
+    required String restroom,
+    required String detail,
+  }) async {
     if (!approved) throw StateError('Approval required');
-    if (facility(facilityId) == null || floor < 0 ||
-        restroom.trim().isEmpty || restroom.trim().length > 120 ||
-        detail.trim().length < 5 || detail.trim().length > 2000) {
+    if (facility(facilityId) == null ||
+        floor < 0 ||
+        restroom.trim().isEmpty ||
+        restroom.trim().length > 120 ||
+        detail.trim().length < 5 ||
+        detail.trim().length > 2000) {
       throw StateError('Provide a valid location and leak description.');
     }
     final data = {
@@ -791,12 +916,11 @@ class CampusStore extends ChangeNotifier {
       'createdByName': name,
       'status': 'open',
       'createdAt': timestamp(),
-      'resolvedAt': ''
+      'resolvedAt': '',
     };
     _ensureLive();
 
-      await _col('sos').add(data);
-    
+    await _col('sos').add(data);
   }
 
   Future<void> closeSOS(String id) async {
@@ -804,12 +928,11 @@ class CampusStore extends ChangeNotifier {
     final values = {
       'status': 'resolved',
       'resolvedAt': timestamp(),
-      'resolvedBy': uid
+      'resolvedBy': uid,
     };
     _ensureLive();
 
-      await _col('sos').doc(id).update(values);
-    
+    await _col('sos').doc(id).update(values);
   }
 
   Future<void> postNotice(String targetFacilityId, String text) async {
@@ -824,24 +947,26 @@ class CampusStore extends ChangeNotifier {
       'targetFacilityId': targetFacilityId,
       'message': text.trim(),
       'createdBy': uid,
-      'createdAt': timestamp()
+      'createdAt': timestamp(),
     };
     _ensureLive();
 
-      await _col('notices').add(item);
-    
+    await _col('notices').add(item);
   }
 
-  Future<void> changeMember(String memberId,
-      {required bool approved,
-      required String role,
-      required String facilityId,
-      required String room}) async {
+  Future<void> changeMember(
+    String memberId, {
+    required bool approved,
+    required String role,
+    required String facilityId,
+    required String room,
+  }) async {
     if (!isAdmin) throw StateError('Admin access required');
     if (memberId == uid) {
       throw StateError('Cannot alter your own Admin permissions.');
     }
-    if (!roleNames.contains(role) || room.length > 80 ||
+    if (!roleNames.contains(role) ||
+        room.length > 80 ||
         (facilityId.isNotEmpty && facility(facilityId) == null)) {
       throw StateError('Invalid member role, room, or facility.');
     }
@@ -849,12 +974,11 @@ class CampusStore extends ChangeNotifier {
       'approved': approved,
       'role': role,
       'facilityId': facilityId,
-      'room': room
+      'room': room,
     };
     _ensureLive();
 
-      await _users.doc(memberId).update(values);
-    
+    await _users.doc(memberId).update(values);
   }
 
   void clearMessage() {
