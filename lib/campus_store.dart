@@ -209,6 +209,9 @@ class CampusStore extends ChangeNotifier {
       {bool create = false, String name = ''}) async {
     if (!cloud) throw StateError('Firebase not configured');
     if (create) {
+      if (name.trim().length < 2 || name.trim().length > 120) {
+        throw StateError('Enter a valid full name (2–120 characters).');
+      }
       final result = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: email.trim(), password: password);
       // New members are ALWAYS pending students. Only admin may elevate a role.
@@ -224,7 +227,14 @@ class CampusStore extends ChangeNotifier {
       });
       // Verify ownership of the email before a trusted Firebase administrator
       // can approve this account. Verification is a real Firebase email.
-      await result.user!.sendEmailVerification();
+      try {
+        await result.user!.sendEmailVerification();
+      } on FirebaseAuthException catch (error) {
+        // Account and Firestore profile already exist; do not falsely report
+        // the registration as failed. User may resend from Pending screen.
+        message = 'Account created. Email verification not sent: ${error.message}';
+        notifyListeners();
+      }
     } else {
       await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email.trim(), password: password);
@@ -450,6 +460,17 @@ class CampusStore extends ChangeNotifier {
       required double lowWaterThresholdLitres,
       required double essentialLitresPerResident}) async {
     if (!isAdmin) throw StateError('Admin access required');
+    if (name.trim().isEmpty || name.trim().length > 120 ||
+        !facilityTypes.contains(type) ||
+        occupants < 0 || floors < 1 || restrooms < 0 ||
+        (type == 'hostel' && occupants < 1) ||
+        !dailyCapLitres.isFinite || dailyCapLitres < 0 ||
+        (type == 'canteen' && dailyCapLitres <= 0) ||
+        !lowWaterThresholdLitres.isFinite || lowWaterThresholdLitres < 0 ||
+        !essentialLitresPerResident.isFinite ||
+        essentialLitresPerResident < 1 || essentialLitresPerResident > 1000) {
+      throw StateError('Enter valid facility information and water policies.');
+    }
     final item = {
       'name': name.trim(),
       'type': type,
@@ -512,6 +533,16 @@ class CampusStore extends ChangeNotifier {
       required double heightCm,
       required double diameterCm}) async {
     if (!isAdmin) throw StateError('Admin access required');
+    if (name.trim().isEmpty || name.trim().length > 120 ||
+        facility(facilityId) == null ||
+        !['rect', 'cylinder'].contains(shape) ||
+        !heightCm.isFinite || heightCm <= 0 || heightCm > 100000 ||
+        !lengthCm.isFinite || !widthCm.isFinite || !diameterCm.isFinite ||
+        lengthCm < 0 || widthCm < 0 || diameterCm < 0 ||
+        (shape == 'rect' && (lengthCm <= 0 || widthCm <= 0)) ||
+        (shape == 'cylinder' && diameterCm <= 0)) {
+      throw StateError('Enter valid measured tank dimensions.');
+    }
     final item = {
       'name': name.trim(),
       'facilityId': facilityId,
@@ -568,11 +599,12 @@ class CampusStore extends ChangeNotifier {
       required double litresPerPerson,
       required String notes}) async {
     if (!approved) throw StateError('You are awaiting admin approval');
-    if (peopleCount < 1 ||
-        peopleCount > 500 ||
-        litresPerPerson <= 0 ||
-        litresPerPerson > 1000) {
-      throw StateError('Invalid water request');
+    if (peopleCount < 1 || peopleCount > 500 ||
+        !litresPerPerson.isFinite || litresPerPerson <= 0 ||
+        litresPerPerson > 1000 || !activityNames.contains(activity) ||
+        notes.length > 2000 ||
+        !visibleFacilities.any((f) => f['id'] == facilityId)) {
+      throw StateError('Invalid water request or assigned facility.');
     }
     // Facility scope is restricted by UI + Firestore rules.
     final quantity = peopleCount * litresPerPerson;
@@ -607,7 +639,7 @@ class CampusStore extends ChangeNotifier {
       throw StateError('Only pending requests may be reviewed');
     }
     if (approve &&
-        (approvedLitres <= 0 ||
+        (!approvedLitres.isFinite || approvedLitres <= 0 ||
             approvedLitres > nval(request['quantityLitres']))) {
       throw StateError('Approval must be > 0 and no more than requested');
     }
@@ -677,6 +709,11 @@ class CampusStore extends ChangeNotifier {
       required String restroom,
       required String detail}) async {
     if (!approved) throw StateError('Approval required');
+    if (facility(facilityId) == null || floor < 0 ||
+        restroom.trim().isEmpty || restroom.trim().length > 120 ||
+        detail.trim().length < 5 || detail.trim().length > 2000) {
+      throw StateError('Provide a valid location and leak description.');
+    }
     final data = {
       'facilityId': facilityId,
       'floor': floor,
@@ -709,7 +746,12 @@ class CampusStore extends ChangeNotifier {
 
   Future<void> postNotice(String targetFacilityId, String text) async {
     if (!isAdmin) throw StateError('Admin access required');
-    if (text.trim().isEmpty) throw StateError('Enter a message');
+    if (text.trim().isEmpty || text.trim().length > 2000) {
+      throw StateError('Enter a notice of 1–2000 characters.');
+    }
+    if (targetFacilityId.isNotEmpty && facility(targetFacilityId) == null) {
+      throw StateError('Selected notice location does not exist.');
+    }
     final item = {
       'targetFacilityId': targetFacilityId,
       'message': text.trim(),
@@ -728,6 +770,13 @@ class CampusStore extends ChangeNotifier {
       required String facilityId,
       required String room}) async {
     if (!isAdmin) throw StateError('Admin access required');
+    if (memberId == uid) {
+      throw StateError('Cannot alter your own Admin permissions.');
+    }
+    if (!roleNames.contains(role) || room.length > 80 ||
+        (facilityId.isNotEmpty && facility(facilityId) == null)) {
+      throw StateError('Invalid member role, room, or facility.');
+    }
     final values = {
       'approved': approved,
       'role': role,
