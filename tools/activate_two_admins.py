@@ -45,18 +45,18 @@ def activate(args):
     app = firebase_admin.initialize_app(options={"projectId": PROJECT_ID})
     db = firestore.client(app=app)
     members = []
-    for addr in (one, two):
+    for admin_number, addr in enumerate((one, two), start=1):
         person = auth.get_user_by_email(addr, app=app)
         if not person.email_verified or person.disabled:
-            raise ValueError(f"{addr}: email must be verified and account enabled. No changes made.")
+            raise ValueError(f"Admin {admin_number}: email must be verified and account enabled.")
         ref = db.collection("users").document(person.uid)
         snap = ref.get()
         if not snap.exists:
-            raise ValueError(f"{addr}: Firestore member profile is missing. Register using the app.")
+            raise ValueError(f"Admin {admin_number}: Firestore member profile missing. Register in the app.")
         data = snap.to_dict()
         if (str(data.get("email", "")).strip().lower() != addr
                 or data.get("campusId") != CAMPUS_ID):
-            raise ValueError(f"{addr}: Firebase Auth and campus profile identity do not match.")
+            raise ValueError(f"Admin {admin_number}: Firebase Auth and campus profile identity mismatch.")
         members.append((person, ref, snap, data))
 
     if members[0][0].uid == members[1][0].uid:
@@ -88,13 +88,12 @@ def activate(args):
     if changed:
         batch.commit()
 
-    for addr, (person, ref, _, _) in zip((one, two), members):
+    for admin_number, (_, ref, _, _) in enumerate(members, start=1):
         refreshed = ref.get().to_dict()
         if not refreshed or refreshed.get("approved") is not True or refreshed.get("role") != "admin":
-            raise RuntimeError(f"Post-write verification failed for {addr}.")
+            raise RuntimeError(f"Post-write verification failed for Admin {admin_number}.")
     print(f"SUCCESS: two verified full-control administrators activated on {PROJECT_ID}.")
-    print(f"Admin 1: {one}")
-    print(f"Admin 2: {two}")
+    print("Both account identities kept private in CI logs.")
     print(f"Profiles changed: {changed}; no third admin was created.")
     print("Sign out/sign back in on both Android devices to refresh the role.")
 
