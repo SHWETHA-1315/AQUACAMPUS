@@ -116,6 +116,16 @@ jobs:
             --confirm-one "$CONFIRM_ONE" --confirm-two "$CONFIRM_TWO"
           echo "Two verified full-control Admins activated in Firebase." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Audit deployed rules and both live Admin accounts
+        if: inputs.admin_one_email != '' && inputs.admin_two_email != ''
+        env:
+          ADMIN_ONE: ${{ inputs.admin_one_email }}
+          ADMIN_TWO: ${{ inputs.admin_two_email }}
+        run: |
+          python3 tools/check_production_ready.py \
+            --admin-one "$ADMIN_ONE" --admin-two "$ADMIN_TWO"
+          echo "Read-only server audit passed for both active Admin identities and the current Firestore rules." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Mark verified cloud deployment
         run: |
           echo "Firebase Auth + Firestore rules deployed to aquacampus-ed284" >> "$GITHUB_STEP_SUMMARY"
