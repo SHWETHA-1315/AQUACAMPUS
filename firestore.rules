@@ -57,13 +57,16 @@ service cloud.firestore {
         request.resource.data.room == '' &&
         request.resource.data.campusId == 'main' &&
         request.resource.data.email == request.auth.token.email;
-      // Protect the active operator from accidentally removing the last
-      // trusted Admin through the mobile member editor.
+      // Dual-Admin production policy: only the verified project owner's
+      // trusted Admin SDK bootstrap can grant or remove Admin status.
+      // Both Admin accounts can manage everyone else, but neither can
+      // demote the other or grant a third Admin from an untrusted client.
       allow update: if isAdmin() && userId != request.auth.uid &&
+        resource.data.role != 'admin' &&
         resource.data.campusId == 'main' &&
         request.resource.data.campusId == resource.data.campusId &&
         request.resource.data.email == resource.data.email &&
-        request.resource.data.role in ['admin','worker','warden','student','teacher'] &&
+        request.resource.data.role in ['worker','warden','student','teacher'] &&
         request.resource.data.approved is bool &&
         request.resource.data.facilityId is string &&
         request.resource.data.room is string &&
