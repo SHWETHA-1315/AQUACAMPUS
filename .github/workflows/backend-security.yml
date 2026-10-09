@@ -47,3 +47,14 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Run Firestore role/security tests against emulator
         run: npm run test:emulator
+
+  windows-cli:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Firebase progress handling in Windows PowerShell 5.1
+        shell: powershell
+        run: .\backend-tests\firebase-cli-windows.test.ps1
