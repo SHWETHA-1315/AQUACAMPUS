@@ -1,5 +1,9 @@
 # AQUACAMPUS — Android Campus Water Management
 
+## Android download on Render
+
+The Render service publishes an APK download page only; it has no campus control portal. `scripts/build_render_web.sh` checks the release checksum and copies the APK into the static output. No Firebase secrets or Flutter Web build are needed for distribution. The APK is version 1.0.0, development-signed, and includes the registered Firebase Android configuration. Live Firebase deployment and first Admin activation remain pending verification; publishing this download does not complete those steps.
+
 AQUACAMPUS is a Flutter **Android mobile application** with five role-based portals: Admin, Water Worker, Hostel Warden, Student and Teacher.
 
 **Selected backend:** Firebase project [`aquacampus-ed284`](https://console.firebase.google.com/project/aquacampus-ed284/overview). **Android package:** `com.example.aquacampus`. The registered Android client configuration from Firebase has now been integrated into `lib/firebase_android_config.dart`. Account-managed Authentication, Firestore creation and rules deployment still need confirmation before live user workflows can operate.
