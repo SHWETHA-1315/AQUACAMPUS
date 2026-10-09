@@ -594,17 +594,55 @@ class ApprovalPage extends StatelessWidget {
             const Icon(Icons.verified_user_outlined, color: sea, size: 64),
             const SizedBox(height: 18),
             Text(
-              store.emailVerified ? 'Waiting for Admin' : 'Verify your email',
+              store.profileMissing
+                  ? 'Complete your registration'
+                  : store.emailVerified
+                  ? 'Waiting for Admin'
+                  : 'Verify your email',
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 12),
             Text(
-              store.emailVerified
+              store.profileMissing
+                  ? 'Your login exists, but the campus profile is missing. Restore it to request Admin approval.'
+                  : store.emailVerified
                   ? 'Admin will approve your account and assign your role and building.'
                   : 'Open the link in your email, then come back and tap the button below.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 14),
+            if (store.registeredEmail.isNotEmpty) ...[
+              Text(
+                'Account: ${store.registeredEmail}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w700, color: ink),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (store.profileMissing) ...[
+              const InfoBanner(
+                'This restores only your own pending Student account. Admin privileges are not granted.',
+              ),
+              FilledButton.icon(
+                onPressed: () async {
+                  try {
+                    await store.restoreMissingProfile();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Profile restored. Await Admin approval.')),
+                    );
+                  } catch (error) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(friendlyError(error))),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.manage_accounts_outlined),
+                label: const Text('Restore my account profile'),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (!store.emailVerified) ...[
               const Text(
                 'Check your inbox and Spam folder for the verification link. '
@@ -621,7 +659,7 @@ class ApprovalPage extends StatelessWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text(
-                          'Verification email sent. Check your inbox.',
+                          'Firebase accepted the verification request. Check Inbox and Spam, and confirm your account address.',
                         ),
                       ),
                     );
@@ -785,7 +823,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     final pages = [
       const NavItem('Overview', Icons.dashboard_rounded),
       const NavItem('Planner', Icons.event_note_rounded),
-      if (!s.isTeacher) const NavItem('Rooms', Icons.meeting_room_outlined),
+      if (!s.isTeacher &&
+          (!s.isStudent || s.facility(s.myFacilityId)?['type'] == 'hostel'))
+        const NavItem('Rooms', Icons.meeting_room_outlined),
       const NavItem('Facilities', Icons.apartment_rounded),
       const NavItem('Tanks', Icons.water_rounded),
       const NavItem('Requests', Icons.playlist_add_check_circle_rounded),
@@ -1283,7 +1323,8 @@ class OverviewPage extends StatelessWidget {
     final activeSOS = s.isStaff
         ? s.sos.where((a) => a['status'] == 'open').length
         : 0;
-    final target = s.isStudent || s.isWarden
+    final target = (s.isStudent || s.isWarden) &&
+            s.facility(s.myFacilityId)?['type'] == 'hostel'
         ? s.facility(s.myFacilityId)
         : null;
     final share = target == null
@@ -1304,12 +1345,33 @@ class OverviewPage extends StatelessWidget {
             runSpacing: 10,
             children: [
               for (final item in [
-                const NavItem('Requests', Icons.water_drop_outlined),
-                const NavItem('Planner', Icons.event_note_outlined),
-                if (s.isAdmin) const NavItem('Facilities', Icons.apartment),
-                if (s.isAdmin) const NavItem('Members', Icons.people_outline),
-                const NavItem('Tanks', Icons.water),
-                const NavItem('SOS', Icons.report_problem_outlined),
+                if (s.isAdmin) ...[
+                  const NavItem('Members', Icons.people_outline),
+                  const NavItem('Facilities', Icons.apartment),
+                  const NavItem('Tanks', Icons.water),
+                  const NavItem('Requests', Icons.water_drop_outlined),
+                  const NavItem('SOS', Icons.report_problem_outlined),
+                  const NavItem('Notices', Icons.campaign_outlined),
+                ] else if (s.isWorker) ...[
+                  const NavItem('Tanks', Icons.water),
+                  const NavItem('Requests', Icons.water_drop_outlined),
+                  const NavItem('SOS', Icons.report_problem_outlined),
+                  const NavItem('Planner', Icons.event_note_outlined),
+                  const NavItem('Notices', Icons.campaign_outlined),
+                ] else if (s.isWarden) ...[
+                  const NavItem('Rooms', Icons.meeting_room_outlined),
+                  const NavItem('Requests', Icons.water_drop_outlined),
+                  const NavItem('Tanks', Icons.water),
+                  const NavItem('SOS', Icons.report_problem_outlined),
+                  const NavItem('Notices', Icons.campaign_outlined),
+                  const NavItem('Planner', Icons.event_note_outlined),
+                ] else ...[
+                  const NavItem('Requests', Icons.water_drop_outlined),
+                  const NavItem('SOS', Icons.report_problem_outlined),
+                  const NavItem('Planner', Icons.event_note_outlined),
+                  const NavItem('Tanks', Icons.water),
+                  const NavItem('Notices', Icons.campaign_outlined),
+                ],
               ])
                 SizedBox(
                   width: (box.maxWidth - 10) / 2,
@@ -3491,12 +3553,13 @@ class MembersPage extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () async {
-                if ((role == 'student' || role == 'warden') &&
-                    approved &&
-                    store.facility(facilityId)?['type'] != 'hostel') {
+                if (approved &&
+                    ((role == 'student' && store.facility(facilityId) == null) ||
+                     (role == 'warden' &&
+                      store.facility(facilityId)?['type'] != 'hostel'))) {
                   ScaffoldMessenger.of(ctx).showSnackBar(
                     const SnackBar(
-                      content: Text('Students and wardens need a valid hostel'),
+                      content: Text('Assign a student to a building or hostel, or a warden to a hostel.'),
                     ),
                   );
                   return;
