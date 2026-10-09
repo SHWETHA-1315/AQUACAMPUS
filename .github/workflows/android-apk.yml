@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Checkout Flutter app source
         uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
           grep -q "aquacampus-ed284" lib/firebase_android_config.dart || { echo "Wrong Firebase project"; exit 1; }
           for attempt in 1 2 3; do
             echo "Android release compilation attempt $attempt of 3"
-            if flutter build apk --release; then
+            if flutter build apk --release --target-platform android-arm64 --split-per-abi; then
               exit 0
             fi
             # Sometimes Android SDK's NDK download ends as a partial/corrupt ZIP.
@@ -60,5 +60,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AQUACAMPUS-Android-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           retention-days: 14
+      - name: Publish direct APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: android-${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk AQUACAMPUS.apk
+          sha256sum AQUACAMPUS.apk > AQUACAMPUS.apk.sha256
+          gh release create "$RELEASE_TAG" AQUACAMPUS.apk AQUACAMPUS.apk.sha256 \
+            --target "$GITHUB_SHA" --title "AQUACAMPUS Android" \
+            --notes "Android ARM64 APK. Firebase project: aquacampus-ed284." --latest
