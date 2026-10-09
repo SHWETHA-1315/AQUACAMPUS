@@ -81,6 +81,7 @@ class CampusStore extends ChangeNotifier {
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
   _profileSubscription;
 
+  String get registeredEmail => FirebaseAuth.instance.currentUser?.email ?? '';
   String get role => '${user['role'] ?? 'student'}';
   String get name => '${user['name'] ?? 'Campus member'}';
   String get uid => '${user['id'] ?? ''}';
