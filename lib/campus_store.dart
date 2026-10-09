@@ -54,7 +54,11 @@ class CampusStore extends ChangeNotifier {
   String get role => '${user['role'] ?? 'student'}';
   String get name => '${user['name'] ?? 'Campus member'}';
   String get uid => '${user['id'] ?? ''}';
-  bool get approved => user['approved'] == true;
+  // Email verification is required before any campus data becomes accessible.
+  // The Firebase email-verification token is also enforced by Firestore rules.
+  bool get approved =>
+      user['approved'] == true &&
+      (FirebaseAuth.instance.currentUser?.emailVerified ?? false);
   bool get isAdmin => role == 'admin';
   bool get isWorker => role == 'worker';
   bool get isStaff => isAdmin || isWorker;
@@ -209,8 +213,16 @@ class CampusStore extends ChangeNotifier {
       throw StateError('Sign in first.');
     }
     await current.reload();
-    final verified = FirebaseAuth.instance.currentUser?.emailVerified ?? false;
-    notifyListeners();
+    final refreshedUser = FirebaseAuth.instance.currentUser;
+    final verified = refreshedUser?.emailVerified ?? false;
+    if (verified && refreshedUser != null) {
+      await refreshedUser.getIdToken(true);
+      // Start subscriptions now that the Firebase ID token has the verified
+      // email claim. Previously denied listeners must not remain stale.
+      _onAuth(refreshedUser);
+    } else {
+      notifyListeners();
+    }
     return verified;
   }
 
