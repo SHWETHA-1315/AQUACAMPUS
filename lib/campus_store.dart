@@ -988,6 +988,7 @@ class CampusStore extends ChangeNotifier {
 
   @override
   void dispose() {
+    ++_authGeneration;
     _clearSubscriptions();
     _authSubscription?.cancel();
     super.dispose();

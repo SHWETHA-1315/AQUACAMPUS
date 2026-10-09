@@ -43,6 +43,9 @@ exit /b 7
   }
   if (-not $caught) { throw 'Nonzero exit code was accepted as success' }
   if ($ErrorActionPreference -ne 'Stop') { throw 'Caller error preference changed on failure' }
+  # GitHub's PowerShell runner exits with LASTEXITCODE, including a caught
+  # simulated failure. The expected failure above is not the test result.
+  $global:LASTEXITCODE = 0
   Write-Host 'PASS: stderr progress preserves JSON; CLI failures remain errors.'
 } finally {
   Remove-Item -LiteralPath $tempDir -Recurse -Force

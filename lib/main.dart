@@ -123,7 +123,8 @@ class OceanHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: compact ? 158 : 200,
+    width: double.infinity,
+    constraints: BoxConstraints(minHeight: compact ? 158 : 200),
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(25),
       gradient: const LinearGradient(
@@ -148,6 +149,7 @@ class OceanHero extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 width: 46,
@@ -2067,6 +2069,8 @@ class FacilitiesPage extends StatelessWidget {
                   ),
                   decoration: const InputDecoration(
                     labelText: 'Basic water per person / day (L)',
+                    helperText: 'Use the daily amount set by your campus.',
+                    helperMaxLines: 2,
                   ),
                 ),
               ],
@@ -2090,6 +2094,8 @@ class FacilitiesPage extends StatelessWidget {
                 ),
                 decoration: const InputDecoration(
                   labelText: 'Warn when water is below (L)',
+                  helperText: 'Show a warning below this tank water amount.',
+                  helperMaxLines: 2,
                 ),
               ),
               const SizedBox(height: 10),
@@ -2230,6 +2236,8 @@ class FacilitiesPage extends StatelessWidget {
                     ),
                     decoration: const InputDecoration(
                       labelText: 'Basic water per person / day (L)',
+                      helperText: 'Use the daily amount set by your campus.',
+                      helperMaxLines: 2,
                     ),
                   ),
                 ],
@@ -2251,6 +2259,8 @@ class FacilitiesPage extends StatelessWidget {
                   ),
                   decoration: const InputDecoration(
                     labelText: 'Warn when water is below (L)',
+                    helperText: 'Show a warning below this tank water amount.',
+                    helperMaxLines: 2,
                   ),
                 ),
               ],
@@ -2378,10 +2388,10 @@ class TanksPage extends StatelessWidget {
                     ),
                   ),
                   if (store.isStaff)
-                    IconButton.filledTonal(
+                    TextButton.icon(
                       onPressed: () => _addReading(context, t),
                       icon: const Icon(Icons.straighten),
-                      tooltip: 'Update water height',
+                      label: const Text('Enter level'),
                     ),
                 ],
               ),
@@ -3347,6 +3357,28 @@ class MembersPage extends StatelessWidget {
   Widget build(BuildContext context) => ScreenBody(
     title: 'People & roles',
     subtitle: 'Approve people and choose their role, building and room.',
+    action: FilledButton.icon(
+      icon: const Icon(Icons.person_add_alt_1),
+      label: const Text('Add faculty / member'),
+      onPressed: () => showDialog<void>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: const Text('Add faculty or a member'),
+          content: const Text(
+            '1. Ask them to tap Register on the login page.\n\n'
+            '2. They enter their own name, email and password, then open the email verification link.\n\n'
+            '3. Come back to People & roles. Tap Assign / Approve next to their name.\n\n'
+            '4. Choose Teacher for faculty, or the right role. Turn on Approve member and tap Save.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      ),
+    ),
     children: [
       const InfoBanner(
         'To add faculty: ask them to register with their own email and verify it. Find them here, tap Assign / Approve, choose Teacher, turn on Approve member, then Save.',
