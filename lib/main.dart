@@ -3420,7 +3420,7 @@ class MembersPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ScreenBody(
     title: 'People & roles',
-    subtitle: 'Approve people and choose their role, building and room.',
+    subtitle: 'Both administrators have full campus controls. Assign other members to the right roles and buildings.',
     action: FilledButton.icon(
       icon: const Icon(Icons.person_add_alt_1),
       label: const Text('Add faculty / member'),
@@ -3432,7 +3432,8 @@ class MembersPage extends StatelessWidget {
             '1. Ask them to tap Register on the login page.\n\n'
             '2. They enter their own name, email and password, then open the email verification link.\n\n'
             '3. Come back to People & roles. Tap Assign / Approve next to their name.\n\n'
-            '4. Choose Teacher for faculty, or the right role. Turn on Approve member and tap Save.',
+            '4. Choose Teacher, Worker, Warden, or Student. Turn on Approve member and save.\n\n'
+            'To activate TWO Admin accounts, ask the Firebase project owner to verify and approve both accounts securely.',
           ),
           actions: [
             TextButton(
@@ -3444,8 +3445,14 @@ class MembersPage extends StatelessWidget {
       ),
     ),
     children: [
+      InfoBanner(
+        store.adminCount == 2
+            ? 'Both verified Admin accounts are active and protected. Each controls buildings, tanks, requests, SOS, notices and member assignments.'
+            : 'Active administrators: ${store.adminCount} of 2. A Firebase project owner must activate two separate verified accounts before both Admins can sign in.',
+        warning: store.adminCount != 2,
+      ),
       const InfoBanner(
-        'To add faculty: ask them to register with their own email and verify it. Find them here, tap Assign / Approve, choose Teacher, turn on Approve member, then Save.',
+        'To add a student, teacher, warden or water worker: ask them to register and verify their email. Then choose Assign / Approve and select their role and location. Administrator promotion requires trusted project-owner activation.',
       ),
       if (store.people.isEmpty)
         _empty('New people appear here after they register in the app.'),
@@ -3471,7 +3478,15 @@ class MembersPage extends StatelessWidget {
               ),
               _labelValue('Role', '${p['role']}'),
               _labelValue('Building', store.facilityName('${p['facilityId']}')),
-              if (p['id'] != store.uid)
+              if (p['role'] == 'admin')
+                const Align(
+                  alignment: Alignment.centerRight,
+                  child: Chip(
+                    avatar: Icon(Icons.admin_panel_settings_outlined, size: 18),
+                    label: Text('Protected administrator'),
+                  ),
+                )
+              else
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton.icon(
@@ -3509,7 +3524,7 @@ class MembersPage extends StatelessWidget {
                   initialValue: role,
                   decoration: const InputDecoration(labelText: 'Role'),
                   items: [
-                    for (final r in roleNames)
+                    for (final r in roleNames.where((value) => value != 'admin'))
                       DropdownMenuItem(value: r, child: Text(_nice(r))),
                   ],
                   onChanged: (v) => setDialog(() => role = v ?? role),
