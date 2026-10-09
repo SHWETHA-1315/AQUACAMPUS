@@ -65,10 +65,14 @@ registered, email-verified accounts**. No one can self-approve.
    unchanged). It refuses to replace a third person who is already an Admin.
 4. Alternatively, the owner configures the GitHub `firebase-production`
    environment with secure Workload Identity variables
-   `FIREBASE_WIF_PROVIDER` and `FIREBASE_DEPLOY_SERVICE_ACCOUNT`. Manually run
-   **Deploy AQUACAMPUS Firebase Cloud Backend** with
-   `project=aquacampus-ed284` and both confirmed Admin emails. The workflow
-   must pass its read-only live audit.
+   `FIREBASE_WIF_PROVIDER` and `FIREBASE_DEPLOY_SERVICE_ACCOUNT`, and store
+   two **environment secrets** `AQUACAMPUS_ADMIN_ONE_EMAIL` and
+   `AQUACAMPUS_ADMIN_TWO_EMAIL` (two registered, verified accounts).
+   Manually run **Deploy AQUACAMPUS Firebase Cloud Backend** with
+   `project=aquacampus-ed284` and input
+   `approve_two_admins=ACTIVATE TWO ADMINS`. The two email addresses must
+   not be entered as public workflow inputs. The workflow must pass its
+   read-only live audit.
 5. Each Admin then signs out/back in. Both Admins can access Members, Buildings,
    Tanks, Requests, SOS, Notices, and water planning. They can assign and
    approve Student/Teacher/Warden/Worker accounts, but **cannot remove their
