@@ -9,20 +9,8 @@ on:
         description: 'Type aquacampus-ed284 to confirm production deployment'
         type: string
         required: true
-      admin_one_email:
-        description: 'Verified Firebase email of first Admin (optional unless activating both)'
-        type: string
-        required: false
-      admin_two_email:
-        description: 'Verified Firebase email of second Admin (different from first)'
-        type: string
-        required: false
-      confirm_admin_one_email:
-        description: 'Repeat first Admin email exactly'
-        type: string
-        required: false
-      confirm_admin_two_email:
-        description: 'Repeat second Admin email exactly'
+      approve_two_admins:
+        description: 'To activate both admins using environment secrets, type ACTIVATE TWO ADMINS'
         type: string
         required: false
 
@@ -94,33 +82,32 @@ jobs:
           echo "Cloud deploy finished. Verify project Auth and deployed rule version in Firebase Console."
 
       - name: Activate TWO verified Admin accounts (optional, all-or-nothing)
-        if: inputs.admin_one_email != '' || inputs.admin_two_email != '' || inputs.confirm_admin_one_email != '' || inputs.confirm_admin_two_email != ''
+        if: inputs.approve_two_admins != ''
         env:
-          ADMIN_ONE: ${{ inputs.admin_one_email }}
-          ADMIN_TWO: ${{ inputs.admin_two_email }}
-          CONFIRM_ONE: ${{ inputs.confirm_admin_one_email }}
-          CONFIRM_TWO: ${{ inputs.confirm_admin_two_email }}
+          ADMIN_ONE: ${{ secrets.AQUACAMPUS_ADMIN_ONE_EMAIL }}
+          ADMIN_TWO: ${{ secrets.AQUACAMPUS_ADMIN_TWO_EMAIL }}
+          EXPLICIT_APPROVAL: ${{ inputs.approve_two_admins }}
         run: |
           set -euo pipefail
-          [[ -n "$ADMIN_ONE" && -n "$ADMIN_TWO" && "$ADMIN_ONE" != "$ADMIN_TWO" ]] || {
-            echo "::error::Provide two different verified Admin emails."
+          [[ "$EXPLICIT_APPROVAL" == 'ACTIVATE TWO ADMINS' ]] || {
+            echo "::error::Owner confirmation is incorrect."
             exit 1
           }
-          [[ "$ADMIN_ONE" == "$CONFIRM_ONE" && "$ADMIN_TWO" == "$CONFIRM_TWO" ]] || {
-            echo "::error::Both Admin confirmation emails must match."
+          [[ -n "$ADMIN_ONE" && -n "$ADMIN_TWO" && "$ADMIN_ONE" != "$ADMIN_TWO" ]] || {
+            echo "::error::Configure two DIFFERENT registered Admin emails as firebase-production environment secrets."
             exit 1
           }
           python3 -m pip install --quiet firebase-admin google-cloud-firestore
           python3 tools/activate_two_admins.py \
             --email-one "$ADMIN_ONE" --email-two "$ADMIN_TWO" \
-            --confirm-one "$CONFIRM_ONE" --confirm-two "$CONFIRM_TWO"
+            --confirm-one "$ADMIN_ONE" --confirm-two "$ADMIN_TWO"
           echo "Two verified full-control Admins activated in Firebase." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Audit deployed rules and both live Admin accounts
-        if: inputs.admin_one_email != '' && inputs.admin_two_email != ''
+        if: inputs.approve_two_admins != ''
         env:
-          ADMIN_ONE: ${{ inputs.admin_one_email }}
-          ADMIN_TWO: ${{ inputs.admin_two_email }}
+          ADMIN_ONE: ${{ secrets.AQUACAMPUS_ADMIN_ONE_EMAIL }}
+          ADMIN_TWO: ${{ secrets.AQUACAMPUS_ADMIN_TWO_EMAIL }}
         run: |
           python3 tools/check_production_ready.py \
             --admin-one "$ADMIN_ONE" --admin-two "$ADMIN_TWO"
