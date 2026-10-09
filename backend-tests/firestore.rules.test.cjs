@@ -60,6 +60,8 @@ test.beforeEach(async () => {
       ['warden','warden@campus.test','warden',true,'hostel-1'],
       ['student','student@campus.test','student',true,'hostel-1'],
       ['second','second@campus.test','student',true,'hostel-1'],
+      ['teacher','teacher@campus.test','teacher',true,''],
+      ['daystudent','daystudent@campus.test','student',true,'canteen-1'],
       ['pending','pending@campus.test','student',false,''],
     ]) {
       await setDoc(doc(db, 'users', id), profile(email,role,approved,facilityId));
@@ -183,4 +185,50 @@ test('admin notices are visible to approved members, never unapproved',async()=>
     {targetFacilityId:'',message:'Campus water update',createdBy:'admin',createdAt:time}));
   await assertSucceeds(getDoc(doc(student,path('notices','notice-1'))));
   await assertFails(getDoc(doc(pending,path('notices','notice-1'))));
+});
+
+test('teacher portal can request academic/canteen water, never private hostel water', async () => {
+  const teacher=context('teacher','teacher@campus.test');
+  await assertSucceeds(setDoc(doc(teacher,path('requests','teacher-canteen')),
+    {...waterRequest('teacher'),facilityId:'canteen-1',room:''}));
+  await assertFails(setDoc(doc(teacher,path('requests','teacher-hostel')),
+    {...waterRequest('teacher'),facilityId:'hostel-1',room:''}));
+  await assertSucceeds(getDocs(query(collection(teacher,'campuses/main/requests'),
+    where('requestedBy','==','teacher'))));
+  await assertFails(getDoc(doc(teacher,path('requests','request-1'))));
+});
+test('student assigned to academic facilities can file water requests and SOS', async () => {
+  const student=context('daystudent','daystudent@campus.test');
+  await assertSucceeds(setDoc(doc(student,path('requests','day-canteen')),
+    {...waterRequest('daystudent'),facilityId:'canteen-1',room:''}));
+  await assertFails(setDoc(doc(student,path('requests','day-hostel')),
+    {...waterRequest('daystudent'),facilityId:'hostel-1',room:''}));
+  await assertSucceeds(setDoc(doc(student,path('sos','day-incident')),{
+    facilityId:'canteen-1',floor:0,restroom:'Kitchen',detail:'Tap leaking near sink',
+    createdBy:'daystudent',createdByName:'Student',
+    status:'open',createdAt:time,resolvedAt:''
+  }));
+});
+test('admin member portal can approve and assign roles; worker cannot', async () => {
+  const admin=context('admin','admin@campus.test');
+  const worker=context('worker','worker@campus.test');
+  await assertSucceeds(getDocs(query(collection(admin,'users'),
+    where('campusId','==','main'))));
+  await assertFails(getDocs(collection(worker,'users')));
+  await assertSucceeds(updateDoc(doc(admin,'users','pending'),{
+    approved:true,role:'warden',facilityId:'hostel-1',room:'102'
+  }));
+  await assertFails(updateDoc(doc(worker,'users','student'),{
+    approved:false
+  }));
+});
+test('role restricted SOS feed and member details remain private', async () => {
+  const teacher=context('teacher','teacher@campus.test');
+  const warden=context('warden','warden@campus.test');
+  const worker=context('worker','worker@campus.test');
+  await assertFails(getDocs(collection(teacher,'campuses/main/sos')));
+  await assertFails(getDocs(collection(warden,'campuses/main/sos')));
+  await assertSucceeds(getDocs(collection(worker,'campuses/main/sos')));
+  await assertFails(getDoc(doc(teacher,'users','student')));
+  await assertSucceeds(getDoc(doc(teacher,'users','teacher')));
 });
