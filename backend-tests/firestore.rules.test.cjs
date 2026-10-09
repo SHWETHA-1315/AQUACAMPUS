@@ -106,6 +106,7 @@ test('admin alone can edit facilities but cannot change original type',async()=>
     {occupants:5,lowWaterThresholdLitres:40,updatedAt:time,updatedBy:'admin'}));
   await assertFails(updateDoc(doc(db,path('facilities','hostel-1')),{type:'canteen',updatedBy:'admin'}));
   await assertFails(updateDoc(doc(db,path('facilities','hostel-1')),{occupants:-8,updatedBy:'admin'}));
+  await assertFails(updateDoc(doc(db,'users','admin'), {approved:false}));
 });
 test('worker manual tank updates have an immutable, linked audit record',async()=>{
   const db=context('worker','worker@campus.test');
