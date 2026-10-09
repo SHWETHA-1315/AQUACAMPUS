@@ -22,6 +22,30 @@ const campusId = 'main';
 // The only authorized Firebase backend for this AQUACAMPUS deployment.
 const aquacampusFirebaseProjectId = 'aquacampus-ed284';
 String timestamp() => DateTime.now().toIso8601String();
+String friendlyError(Object error) {
+  if (error is StateError) return '${error.message}';
+  if (error is FirebaseException) {
+    switch (error.code) {
+      case 'permission-denied':
+        return 'Access could not be confirmed. Verify your email and ask Admin to check your account.';
+      case 'unavailable':
+      case 'network-request-failed':
+        return 'Check your internet and try again.';
+      case 'invalid-credential':
+      case 'wrong-password':
+      case 'user-not-found':
+        return 'Check your email and password, then try again.';
+      case 'email-already-in-use':
+        return 'This email already has an account. Tap Sign in or Forgot password.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please wait a little and try again.';
+      case 'weak-password':
+        return 'Use a password with at least 6 characters.';
+    }
+    return 'Could not complete this step. Please try again.';
+  }
+  return 'Could not complete this step. Please try again.';
+}
 
 class CampusStore extends ChangeNotifier {
   bool loading = true;
@@ -110,7 +134,9 @@ class CampusStore extends ChangeNotifier {
   /// Block operations if any required cloud collection is offline or stale.
   void _ensureLive() {
     if (!cloud || !backendConnected) {
-      throw StateError('Live water database is unavailable. Nothing saved.');
+      throw StateError(
+        'Campus data is still loading. Check your internet and try again. Nothing was saved.',
+      );
     }
   }
 

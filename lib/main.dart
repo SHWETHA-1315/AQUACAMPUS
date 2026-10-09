@@ -472,10 +472,13 @@ class _EntryPageState extends State<EntryPage> {
                                           );
                                     } catch (error) {
                                       if (!context.mounted) return;
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                            SnackBar(content: Text('$error')),
-                                          );
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(friendlyError(error)),
+                                        ),
+                                      );
                                     } finally {
                                       if (mounted) setState(() => busy = false);
                                     }
@@ -624,8 +627,9 @@ class ApprovalPage extends StatelessWidget {
                     );
                   } catch (error) {
                     if (!context.mounted) return;
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text('$error')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(friendlyError(error))),
+                    );
                   }
                 },
                 icon: const Icon(Icons.mark_email_unread_outlined),
@@ -647,8 +651,9 @@ class ApprovalPage extends StatelessWidget {
                     );
                   } catch (error) {
                     if (!context.mounted) return;
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text('$error')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(friendlyError(error))),
+                    );
                   }
                 },
                 icon: const Icon(Icons.refresh_rounded),
@@ -1195,7 +1200,7 @@ Future<bool> execute(
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$error'),
+          content: Text(friendlyError(error)),
           backgroundColor: const Color(0xFFB74335),
         ),
       );

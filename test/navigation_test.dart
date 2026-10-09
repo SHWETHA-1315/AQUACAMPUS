@@ -40,7 +40,16 @@ void main() {
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
     expect(find.text('Sign out'), findsOneWidget);
-    await tester.ensureVisible(find.text('People & roles'));
+    await tester.scrollUntilVisible(
+      find.text('People & roles'),
+      180,
+      scrollable: find
+          .descendant(
+            of: find.byType(Drawer),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.tap(find.text('People & roles'));
     await tester.pumpAndSettle();
     expect(find.textContaining('To add faculty:'), findsOneWidget);
