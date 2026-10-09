@@ -50,6 +50,9 @@ void main() {
           )
           .first,
     );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('People & roles'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('People & roles'));
     await tester.pumpAndSettle();
     expect(find.textContaining('To add faculty:'), findsOneWidget);
