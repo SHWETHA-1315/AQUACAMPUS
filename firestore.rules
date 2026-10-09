@@ -4,7 +4,12 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function myUser() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
     function registered() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
-    function active() { return registered() && myUser().data.approved == true && myUser().data.campusId == 'main'; }
+    function active() {
+      return registered() &&
+        request.auth.token.email_verified == true &&
+        myUser().data.approved == true &&
+        myUser().data.campusId == 'main';
+    }
     function role() { return myUser().data.role; }
     function isAdmin() { return active() && role() == 'admin'; }
     function isWorker() { return active() && role() == 'worker'; }
