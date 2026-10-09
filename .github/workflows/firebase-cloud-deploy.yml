@@ -9,12 +9,20 @@ on:
         description: 'Type aquacampus-ed284 to confirm production deployment'
         type: string
         required: true
-      admin_email:
-        description: 'Optional: verified Firebase email registered through Android app for FIRST Admin'
+      admin_one_email:
+        description: 'Verified Firebase email of first Admin (optional unless activating both)'
         type: string
         required: false
-      confirm_admin_email:
-        description: 'To activate first Admin, repeat the exact same email'
+      admin_two_email:
+        description: 'Verified Firebase email of second Admin (different from first)'
+        type: string
+        required: false
+      confirm_admin_one_email:
+        description: 'Repeat first Admin email exactly'
+        type: string
+        required: false
+      confirm_admin_two_email:
+        description: 'Repeat second Admin email exactly'
         type: string
         required: false
 
@@ -85,24 +93,32 @@ jobs:
           npx firebase-tools deploy --project aquacampus-ed284 --only auth,firestore:rules --non-interactive
           echo "Cloud deploy finished. Verify project Auth and deployed rule version in Firebase Console."
 
-      - name: Activate first verified Admin account (optional, no fake accounts)
-        if: inputs.admin_email != ''
+      - name: Activate TWO verified Admin accounts (optional, all-or-nothing)
+        if: inputs.admin_one_email != '' || inputs.admin_two_email != '' || inputs.confirm_admin_one_email != '' || inputs.confirm_admin_two_email != ''
         env:
-          ADMIN_EMAIL: ${{ inputs.admin_email }}
-          CONFIRM_ADMIN_EMAIL: ${{ inputs.confirm_admin_email }}
+          ADMIN_ONE: ${{ inputs.admin_one_email }}
+          ADMIN_TWO: ${{ inputs.admin_two_email }}
+          CONFIRM_ONE: ${{ inputs.confirm_admin_one_email }}
+          CONFIRM_TWO: ${{ inputs.confirm_admin_two_email }}
         run: |
           set -euo pipefail
-          [[ -n "$ADMIN_EMAIL" && "$ADMIN_EMAIL" == "$CONFIRM_ADMIN_EMAIL" ]] || {
-            echo "::error::First Admin email must be repeated exactly."
+          [[ -n "$ADMIN_ONE" && -n "$ADMIN_TWO" && "$ADMIN_ONE" != "$ADMIN_TWO" ]] || {
+            echo "::error::Provide two different verified Admin emails."
             exit 1
           }
-          python3 -m pip install --quiet firebase-admin
-          python3 tools/bootstrap_admin.py --email "$ADMIN_EMAIL" --confirm-email "$CONFIRM_ADMIN_EMAIL"
-          echo "Verified first Admin activated in Firebase." >> "$GITHUB_STEP_SUMMARY"
+          [[ "$ADMIN_ONE" == "$CONFIRM_ONE" && "$ADMIN_TWO" == "$CONFIRM_TWO" ]] || {
+            echo "::error::Both Admin confirmation emails must match."
+            exit 1
+          }
+          python3 -m pip install --quiet firebase-admin google-cloud-firestore
+          python3 tools/activate_two_admins.py \
+            --email-one "$ADMIN_ONE" --email-two "$ADMIN_TWO" \
+            --confirm-one "$CONFIRM_ONE" --confirm-two "$CONFIRM_TWO"
+          echo "Two verified full-control Admins activated in Firebase." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Mark verified cloud deployment
         run: |
           echo "Firebase Auth + Firestore rules deployed to aquacampus-ed284" >> "$GITHUB_STEP_SUMMARY"
-          echo "All 12 rules-security tests passed before the deployment." >> "$GITHUB_STEP_SUMMARY"
-          echo "Cloud rule deployment verified. First Admin activation runs only if a real registered verified email was explicitly provided." >> "$GITHUB_STEP_SUMMARY"
+          echo "Emulator security tests passed before deployment." >> "$GITHUB_STEP_SUMMARY"
+          echo "Cloud rules deployed. Two-admin activation is performed only when both verified accounts and matching confirmations are supplied." >> "$GITHUB_STEP_SUMMARY"
           echo "Two-phone realtime testing remains a separate acceptance check." >> "$GITHUB_STEP_SUMMARY"
