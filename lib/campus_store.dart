@@ -195,6 +195,18 @@ class CampusStore extends ChangeNotifier {
       .where((u) => u['facilityId'] == facilityId && u['day'] == dateKey())
       .fold(0.0, (a, u) => a + nval(u['usedLitres']).toDouble());
 
+  /// Refresh data after Android returns from background. The device can
+  /// sleep past midnight or lose connectivity while Firebase is suspended.
+  void refreshOnResume() {
+    if (!signedIn || !approved || !cloud) return;
+    if (_currentUsageDay != dateKey()) {
+      _refreshDailyUsageStream();
+      _scheduleDayRollover();
+    } else if (!backendConnected) {
+      retrySync();
+    }
+  }
+
   /// Re-establishes live Firestore listeners without changing the signed-in
   /// identity or copying cached/offline data into campus records.
   void retrySync() {
