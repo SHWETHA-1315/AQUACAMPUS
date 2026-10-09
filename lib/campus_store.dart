@@ -38,6 +38,15 @@ class CampusStore extends ChangeNotifier {
   List<Map<String, dynamic>> dailyUsage = [];
   List<Map<String, dynamic>> tankReadings = [];
   final List<StreamSubscription<dynamic>> _subscriptions = [];
+  final Map<String, bool> _streamOnline = <String, bool>{};
+  StreamSubscription<dynamic>? _dailyUsageSubscription;
+  Timer? _dayRolloverTimer;
+  String _currentUsageDay = dateKey();
+
+  /// Every active feed must have delivered a fresh, server-backed snapshot.
+  bool get backendConnected =>
+      cloud && signedIn && approved && _streamOnline.isNotEmpty &&
+      _streamOnline.values.every((online) => online);
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
       _profileSubscription;
@@ -89,8 +98,7 @@ class CampusStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Server snapshots, not device cache, are required for editing.
-  bool backendConnected = false;
+  /// Block operations if any required cloud collection is offline or stale.
   void _ensureLive() {
     if (!cloud || !backendConnected) {
       throw StateError('Live water database is unavailable. Nothing saved.');
@@ -149,10 +157,11 @@ class CampusStore extends ChangeNotifier {
               facility('${n['targetFacilityId']}')?['type'] == 'college'))
       .toList()
     ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
-  List<Map<String, dynamic>> get visibleTanks => tanks
-      .where((t) =>
-          isStaff || visibleFacilities.any((f) => f['id'] == t['facilityId']))
-      .toList();
+  List<Map<String, dynamic>> get visibleTanks {
+    if (isStaff) return tanks;
+    final allowedIds = visibleFacilities.map((f) => f['id']).toSet();
+    return tanks.where((t) => allowedIds.contains(t['facilityId'])).toList();
+  }
   double dailyUsed(String facilityId) => dailyUsage
       .where((u) => u['facilityId'] == facilityId && u['day'] == dateKey())
       .fold(0.0, (a, u) => a + nval(u['usedLitres']).toDouble());
@@ -223,7 +232,7 @@ class CampusStore extends ChangeNotifier {
   }
 
   void _clearCampusData() {
-    backendConnected = false;
+    _streamOnline.clear();
     facilities = [];
     tanks = [];
     requests = [];
@@ -235,6 +244,10 @@ class CampusStore extends ChangeNotifier {
   }
 
   void _clearSubscriptions() {
+    _dayRolloverTimer?.cancel();
+    _dayRolloverTimer = null;
+    _dailyUsageSubscription?.cancel();
+    _dailyUsageSubscription = null;
     _clearCampusData();
     for (final subscription in _subscriptions) {
       subscription.cancel();
@@ -313,29 +326,71 @@ class CampusStore extends ChangeNotifier {
     });
   }
 
-  void _watch(
+  StreamSubscription<dynamic> _watch(
       String collection, void Function(List<Map<String, dynamic>>) handle,
       [Query<Map<String, dynamic>>? query]) {
     final source = query ?? _col(collection);
-    _subscriptions.add(source.snapshots(includeMetadataChanges: true).listen((snapshot) {
-      if (collection == 'facilities') {
-        backendConnected = !snapshot.metadata.isFromCache;
-      }
-      handle(
-          snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList());
-      notifyListeners();
-    }, onError: (Object e) {
-      if (collection == 'facilities') backendConnected = false;
-      message = '$collection sync failed: $e';
-      notifyListeners();
-    }));
+    _streamOnline[collection] = false;
+    final subscription = source.snapshots(includeMetadataChanges: true).listen(
+      (snapshot) {
+        _streamOnline[collection] =
+            !snapshot.metadata.isFromCache && !snapshot.metadata.hasPendingWrites;
+        handle(snapshot.docs
+            .map((doc) => {...doc.data(), 'id': doc.id}).toList());
+        if (message?.startsWith('$collection sync failed:') ?? false) {
+          message = null;
+        }
+        notifyListeners();
+      },
+      onError: (Object error) {
+        _streamOnline[collection] = false;
+        // A failed listener must not leave stale campus records on screen.
+        handle([]);
+        message = '$collection sync failed: $error';
+        notifyListeners();
+      },
+    );
+    _subscriptions.add(subscription);
+    return subscription;
+  }
+
+  void _refreshDailyUsageStream() {
+    _dailyUsageSubscription?.cancel();
+    if (_dailyUsageSubscription != null) {
+      _subscriptions.remove(_dailyUsageSubscription);
+    }
+    _currentUsageDay = dateKey();
+    dailyUsage = [];
+    _streamOnline['dailyUsage'] = false;
+    _dailyUsageSubscription = _watch(
+      'dailyUsage',
+      (data) => dailyUsage = data,
+      _col('dailyUsage').where('day', isEqualTo: _currentUsageDay),
+    );
+    notifyListeners();
+  }
+
+  void _scheduleDayRollover() {
+    _dayRolloverTimer?.cancel();
+    final now = DateTime.now();
+    final nextDay = DateTime(now.year, now.month, now.day + 1);
+    _dayRolloverTimer = Timer(
+        nextDay.difference(now) + const Duration(milliseconds: 50), () {
+      if (!signedIn || !approved || !cloud) return;
+      _refreshDailyUsageStream();
+      _scheduleDayRollover();
+    });
   }
 
   void _subscribeCloud() {
     _watch('facilities', (v) => facilities = v);
     _watch('tanks', (v) => tanks = v);
-    _watch('notices', (v) => notices = v);
-    _watch('dailyUsage', (v) => dailyUsage = v);
+    // Recent mobile feeds are bounded. Export/long-term history requires
+    // explicit paging rather than loading every document at login.
+    _watch('notices', (v) => notices = v,
+        _col('notices').orderBy('createdAt', descending: true).limit(100));
+    _refreshDailyUsageStream();
+    _scheduleDayRollover();
     Query<Map<String, dynamic>>? requestQuery;
     if (isStudent || isTeacher) {
       requestQuery = _col('requests').where('requestedBy', isEqualTo: uid);
@@ -347,18 +402,24 @@ class CampusStore extends ChangeNotifier {
     _watch('requests', (v) => requests = v, requestQuery);
     if (isStaff) {
       _watch('sos', (v) => sos = v);
-      _watch('tankReadings', (v) => tankReadings = v);
+      _watch('tankReadings', (v) => tankReadings = v,
+          _col('tankReadings').orderBy('measuredAt', descending: true).limit(250));
     }
     if (isAdmin) {
+      _streamOnline['people'] = false;
       _subscriptions.add(_users
           .where('campusId', isEqualTo: campusId)
-          .snapshots()
+          .snapshots(includeMetadataChanges: true)
           .listen((snapshot) {
+        _streamOnline['people'] =
+            !snapshot.metadata.isFromCache && !snapshot.metadata.hasPendingWrites;
         people =
             snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList();
         notifyListeners();
-      }, onError: (Object e) {
-        message = 'Member sync failed: $e';
+      }, onError: (Object error) {
+        _streamOnline['people'] = false;
+        people = [];
+        message = 'Member sync failed: $error';
         notifyListeners();
       }));
     }
