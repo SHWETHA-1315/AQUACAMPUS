@@ -530,6 +530,14 @@ class CampusStore extends ChangeNotifier {
       // ownership verification: Firebase Auth signup already succeeded.
       _verificationAccountUid = authUser.uid;
       final registeredAddress = authUser.email ?? address;
+      // Populate the Firebase display name before the verification request,
+      // so templates using %DISPLAY_NAME% can address new members correctly.
+      // A display-name failure must not block verification itself.
+      try {
+        await authUser.updateDisplayName(name.trim());
+      } catch (error) {
+        debugPrint('Could not set display name before verification: $error');
+      }
       try {
         await _requestVerificationEmail(authUser);
       } catch (_) {
