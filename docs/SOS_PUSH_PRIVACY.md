@@ -6,8 +6,9 @@
   When the Firestore live incident feed contains a new unresolved SOS, Android
   starts a media-playback **foreground service** and a persistent notification.
   It uses the phone's default alarm ringtone; the user can silence it by
-  tapping **SILENCE WORKER SIREN** in the SOS page, in **My alerts**, or via
-  the foreground notification's Silence action. This silences already-received
+  tapping **SILENCE WORKER SIREN** in the SOS page or **Silence my
+  SOS siren** in **My alerts**. The lock-screen notification opens the app,
+  but cannot silence the alarm without a worker signing in. This silences already-received
   SOS IDs on **that worker phone**; **new SOS IDs will ring again**.
 - The SOS is still shown to both authorized Admins and workers. Admins do not
   get the siren. Non-operators may view **only their own SOS reports**.

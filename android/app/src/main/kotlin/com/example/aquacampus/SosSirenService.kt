@@ -37,6 +37,10 @@ class SosSirenService : Service() {
                 val requestUid = intent.getStringExtra("uid")
                 // The action comes from the private on-device notification,
                 // and is allowed only for the active siren identity.
+                if (userId.isEmpty()) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 if (requestUid != null && requestUid != userId) return START_STICKY
                 for (id in activeIds) prefs.edit().putBoolean("muted:${userId}:$id", true).apply()
                 activeIds.clear()
@@ -82,24 +86,20 @@ class SosSirenService : Service() {
                 setSound(null, null)
             }
         )
-        val stopIntent = Intent(this, SosSirenService::class.java)
-            .setAction(SILENCE).putExtra("uid", userId)
-        val stopPending = PendingIntent.getService(this, 42, stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        // No silence action on the lock screen: only a logged-in worker
+        // can silence from their authorized AquaCampus portal.
         val openPending = PendingIntent.getActivity(this, 43,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = if (Build.VERSION.SDK_INT >= 26)
             Notification.Builder(this, CHANNEL_ID) else Notification.Builder(this)
         val note = builder.setContentTitle("WATER EMERGENCY · SOS")
-            .setContentText("Worker siren is active. Silence only after acknowledging.")
+            .setContentText("Open AquaCampus > SOS to silence as a water worker.")
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentIntent(openPending)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_ALARM)
-            .addAction(Notification.Action.Builder(
-                android.R.drawable.ic_media_pause, "Silence siren", stopPending).build())
             .build()
         if (Build.VERSION.SDK_INT >= 29) {
             startForeground(NOTIFICATION_ID, note,
