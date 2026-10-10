@@ -465,7 +465,9 @@ class _EntryPageState extends State<EntryPage> {
                                             SnackBar(
                                               content: Text(
                                                 create
-                                                    ? 'Account created. Await admin verification.'
+                                                    ? store.verificationDeliveryError == null
+                                                     ? 'Account created. Verify your email, then await Admin approval.'
+                                                     : 'Account created, but verification email was not requested. Use Resend on the next screen.'
                                                     : 'Signed in to campus.',
                                               ),
                                             ),
@@ -585,8 +587,8 @@ class ApprovalPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('AQUACAMPUS')),
-    body: Center(
-      child: Padding(
+    body: SafeArea(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -643,6 +645,13 @@ class ApprovalPage extends StatelessWidget {
               ),
               const SizedBox(height: 12),
             ],
+            if (store.verificationDeliveryError != null) ...[
+              InfoBanner(
+                'Verification email request failed: ${store.verificationDeliveryError} '
+                'Your account may still exist. Check the address above and try Resend; do not register again.',
+                warning: true,
+              ),
+            ],
             if (!store.emailVerified) ...[
               const Text(
                 'Check your inbox and Spam folder for the verification link. '
@@ -697,12 +706,18 @@ class ApprovalPage extends StatelessWidget {
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('I verified my email · Refresh'),
               ),
-            ] else
+            ] else ...[
               const Text(
                 'Email verified. Awaiting the campus administrator.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: sea, fontWeight: FontWeight.w600),
               ),
+              TextButton.icon(
+                onPressed: store.retrySync,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Check Admin approval status'),
+              ),
+            ],
             if (store.message != null) ...[
               Text(store.message!, textAlign: TextAlign.center),
               TextButton(
