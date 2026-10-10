@@ -38,13 +38,21 @@ String friendlyError(Object error) {
       case 'email-already-in-use':
         return 'This email already has an account. Tap Sign in or Forgot password.';
       case 'too-many-requests':
-        return 'Firebase temporarily limited these requests. Wait a little before trying again.';
+      case 'quota-exceeded':
+        return 'Firebase temporarily limited email requests. Wait before retrying and ask the project owner to check Authentication limits.';
       case 'operation-not-allowed':
         return 'Email and password sign-in is not enabled in Firebase. Ask the project owner to enable it.';
       case 'invalid-email':
         return 'Enter a valid email address.';
       case 'requires-recent-login':
-        return 'Sign out, sign back in, then retry.';
+      case 'user-token-expired':
+        return 'Sign out and sign back in, then request verification again.';
+      case 'unauthorized-domain':
+      case 'invalid-continue-uri':
+      case 'unauthorized-continue-uri':
+        return 'Firebase email action domain is not authorized. Ask the project owner to check Authentication settings.';
+      case 'user-disabled':
+        return 'This Firebase account is disabled. Contact the campus Admin.';
       case 'weak-password':
         return 'Use a password with at least 6 characters.';
     }
@@ -62,6 +70,51 @@ class CampusStore extends ChangeNotifier {
   // Separate status survives auth-state refreshes and is visible on the
   // verification page even when signup partially succeeded.
   String? verificationDeliveryError;
+  DateTime? lastVerificationRequestAcceptedAt;
+  DateTime? _nextVerificationRequestAt;
+  String? _verificationAccountUid;
+  Timer? _emailCooldownTimer;
+
+  bool get canRequestVerificationEmail =>
+      _nextVerificationRequestAt == null ||
+      !DateTime.now().isBefore(_nextVerificationRequestAt!);
+
+  void _emailRequestAccepted() {
+    lastVerificationRequestAcceptedAt = DateTime.now();
+    verificationDeliveryError = null;
+    _nextVerificationRequestAt =
+        lastVerificationRequestAcceptedAt!.add(const Duration(seconds: 60));
+    _emailCooldownTimer?.cancel();
+    _emailCooldownTimer = Timer(const Duration(seconds: 60), () {
+      notifyListeners();
+    });
+    notifyListeners();
+  }
+
+  Future<void> _requestVerificationEmail(User account) async {
+    if (!canRequestVerificationEmail) {
+      throw StateError(
+        'Firebase recently accepted an email request. Wait at least one minute before trying again.',
+      );
+    }
+    try {
+      // Successful completion means Firebase accepted a sending request,
+      // not that Gmail or a campus mail server delivered the message.
+      await account.sendEmailVerification();
+      _emailRequestAccepted();
+    } on FirebaseException catch (error) {
+      verificationDeliveryError =
+          '${friendlyError(error)} (Firebase: ${error.code})';
+      notifyListeners();
+      rethrow;
+    } catch (_) {
+      verificationDeliveryError =
+          'Firebase could not accept this verification request. Check your internet and retry.';
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   String? message;
   Map<String, dynamic> user = {};
   List<Map<String, dynamic>> facilities = [];
@@ -334,17 +387,26 @@ class CampusStore extends ChangeNotifier {
     if (!cloud || current == null) {
       throw StateError('Sign in first to verify your email.');
     }
-    if (current.emailVerified) return;
+    if (!canRequestVerificationEmail) {
+      throw StateError(
+        'Verification request already accepted. Please wait one minute before resending.',
+      );
+    }
     try {
-      await current.sendEmailVerification();
-      verificationDeliveryError = null;
-      notifyListeners();
+      // Reload first: clicking Resend after verifying a link should refresh
+      // the account instead of sending an unnecessary extra email.
+      await current.reload();
+      final refreshed = FirebaseAuth.instance.currentUser;
+      if (refreshed == null) throw StateError('Please sign in again.');
+      if (refreshed.emailVerified) {
+        verificationDeliveryError = null;
+        await _onAuth(refreshed);
+        return;
+      }
+      await _requestVerificationEmail(refreshed);
     } on FirebaseException catch (error) {
-      verificationDeliveryError = friendlyError(error);
-      notifyListeners();
-      rethrow;
-    } catch (error) {
-      verificationDeliveryError = 'Firebase could not request the verification email. Please try again later.';
+      verificationDeliveryError =
+          '${friendlyError(error)} (Firebase: ${error.code})';
       notifyListeners();
       rethrow;
     }
@@ -405,9 +467,16 @@ class CampusStore extends ChangeNotifier {
       if (authUser == null) {
         throw StateError('Firebase did not return an account. Please sign in again.');
       }
-      // The signed-in Firebase email is the canonical identity required by
-      // Firestore rules. A display name or typed email must not grant access.
+      // Do not depend on a successful Firestore profile write to request
+      // ownership verification: Firebase Auth signup already succeeded.
+      _verificationAccountUid = authUser.uid;
       final registeredAddress = authUser.email ?? address;
+      try {
+        await _requestVerificationEmail(authUser);
+      } catch (_) {
+        // Registration still exists. Expose the exact Firebase request error
+        // on the pending screen, where the person can resend safely.
+      }
       try {
         await _users.doc(authUser.uid).set({
           'name': name.trim(),
@@ -420,23 +489,10 @@ class CampusStore extends ChangeNotifier {
           'createdAt': timestamp(),
         });
       } on FirebaseException catch (error) {
-        // Firebase Authentication might already contain this newly created
-        // user. Don't tell them to register again or lose the recovery path.
         throw StateError(
-          'Login created, but the campus profile was not saved '
-          '(${friendlyError(error)}). When signed in, use Restore my account profile.',
+          'Your Firebase login was created, but the campus profile did not save '
+          '(${friendlyError(error)}). Use Restore my account profile; do not register again.',
         );
-      }
-      try {
-        await authUser.sendEmailVerification();
-        verificationDeliveryError = null;
-      } on FirebaseException catch (error) {
-        // Account and profile exist; stay signed in and make the delivery
-        // problem visible until the user successfully requests a resend.
-        verificationDeliveryError = friendlyError(error);
-      } catch (_) {
-        verificationDeliveryError =
-            'Could not request a verification email. Please tap Resend verification email.';
       }
       notifyListeners();
     } else {
@@ -481,10 +537,23 @@ class CampusStore extends ChangeNotifier {
     profileMissing = false;
     if (authUser == null) {
       verificationDeliveryError = null;
+      lastVerificationRequestAcceptedAt = null;
+      _nextVerificationRequestAt = null;
+      _verificationAccountUid = null;
+      _emailCooldownTimer?.cancel();
       signedIn = false;
       user = {};
       notifyListeners();
       return;
+    }
+    if (_verificationAccountUid != authUser.uid) {
+      // A different signed-in Firebase account must never inherit the
+      // previous user's resend cooldown or verification errors.
+      _verificationAccountUid = authUser.uid;
+      verificationDeliveryError = null;
+      lastVerificationRequestAcceptedAt = null;
+      _nextVerificationRequestAt = null;
+      _emailCooldownTimer?.cancel();
     }
     // Reload verification and refresh the token BEFORE campus listeners start.
     // Firestore checks the token claim, not just the local User flag.
@@ -1122,6 +1191,7 @@ class CampusStore extends ChangeNotifier {
   @override
   void dispose() {
     ++_authGeneration;
+    _emailCooldownTimer?.cancel();
     _clearSubscriptions();
     _authSubscription?.cancel();
     super.dispose();
