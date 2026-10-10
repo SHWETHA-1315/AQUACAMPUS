@@ -153,9 +153,11 @@ void main() {
       home: Scaffold(body: MembersPage(store: store)),
     ));
     await tester.scrollUntilVisible(
-      find.text('Assign / Approve'), 130,
+      find.text('Assign / Approve'), 220,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.text('Assign / Approve'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Assign / Approve'));
     await tester.pumpAndSettle();
     expect(find.text('Edit Pending Member'), findsOneWidget);
