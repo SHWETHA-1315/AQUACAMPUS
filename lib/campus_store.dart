@@ -8,14 +8,42 @@ import 'package:flutter/foundation.dart';
 import 'water_math.dart';
 import 'firebase_android_config.dart';
 
-const roleNames = ['admin', 'worker', 'warden', 'student', 'teacher'];
-const facilityTypes = ['hostel', 'college', 'canteen'];
+// All roles remain centrally assigned by one of the two trusted Admins.
+const roleNames = [
+  'admin', 'worker', 'warden', 'student', 'teacher',
+  'staff', 'canteen', 'gardener', 'driver',
+];
+const facilityTypes = ['hostel', 'college', 'canteen', 'garden', 'transport'];
+
+/// Site-based roles must be assigned only to facilities they operate.
+String? requiredFacilityTypeForRole(String role) => switch (role) {
+  'warden' => 'hostel',
+  'canteen' => 'canteen',
+  'gardener' => 'garden',
+  'driver' => 'transport',
+  _ => null,
+};
+
+bool validRoleFacilityAssignment(
+  String role, bool approved, String facilityId, String? facilityType,
+) {
+  if (!roleNames.contains(role) || role == 'admin') return false;
+  if (facilityId.isNotEmpty && facilityType == null) return false;
+  if (!approved) return true;
+  if (role == 'student' && facilityId.isEmpty) return false;
+  final requiredType = requiredFacilityTypeForRole(role);
+  return requiredType == null ||
+      (facilityId.isNotEmpty && facilityType == requiredType);
+}
+
 const activityNames = [
   'Bathing',
   'Laundry',
   'Room cleaning',
   'Cooking',
   'Utensil washing',
+  'Garden irrigation',
+  'Vehicle washing',
   'Other',
 ];
 const campusId = 'main';
@@ -160,6 +188,25 @@ class CampusStore extends ChangeNotifier {
   bool get isWarden => role == 'warden';
   bool get isStudent => role == 'student';
   bool get isTeacher => role == 'teacher';
+  bool get isGeneralStaff => role == 'staff';
+  bool get isCanteen => role == 'canteen';
+  bool get isGardener => role == 'gardener';
+  bool get isDriver => role == 'driver';
+  bool get isAssignedSiteStaff => isWarden || isCanteen || isGardener || isDriver;
+  bool get hasAcademicAccess => isTeacher || isGeneralStaff;
+
+  String get roleSummary => switch (role) {
+    'admin' => 'Manage all campus water operations and member roles.',
+    'worker' => 'Update tank readings, review water requests and resolve SOS.',
+    'warden' => 'Monitor your hostel, requests, rooms and water issues.',
+    'student' => 'Request water, report leaks and monitor assigned buildings.',
+    'teacher' => 'Manage water needs for academic buildings and the canteen.',
+    'staff' => 'Request and track water for college and canteen work.',
+    'canteen' => 'Manage your assigned canteen water demand and complaints.',
+    'gardener' => 'Request irrigation water and report garden water issues.',
+    'driver' => 'Request vehicle wash water and report transport-area leaks.',
+    _ => 'Contact campus Admin to assign your role.',
+  };
   String get myFacilityId => '${user['facilityId'] ?? ''}';
   String get room => '${user['room'] ?? ''}';
 
@@ -273,14 +320,28 @@ class CampusStore extends ChangeNotifier {
       .fold(0, (a, f) => a + nval(f['occupants']).toInt());
   List<Map<String, dynamic>> get visibleFacilities => facilities.where((f) {
     if (isStaff) return true;
-    if (isStudent || isWarden) return f['id'] == myFacilityId;
-    if (isTeacher) return f['type'] == 'college' || f['type'] == 'canteen';
+    if (isStudent || isAssignedSiteStaff) return f['id'] == myFacilityId;
+    if (hasAcademicAccess) {
+      return f['type'] == 'college' || f['type'] == 'canteen';
+    }
     return false;
   }).toList();
+
+  // Students can additionally report a leak in college/canteen facilities.
+  List<Map<String, dynamic>> get reportableFacilities => facilities.where((f) {
+    if (isStaff) return true;
+    if (isStudent) {
+      return f['id'] == myFacilityId ||
+          f['type'] == 'college' ||
+          f['type'] == 'canteen';
+    }
+    return visibleFacilities.any((site) => site['id'] == f['id']);
+  }).toList();
+
   List<Map<String, dynamic>> get visibleRequests =>
       requests.where((r) {
           if (isStaff) return true;
-          if (isWarden) return r['facilityId'] == myFacilityId;
+          if (isAssignedSiteStaff) return r['facilityId'] == myFacilityId;
           return r['requestedBy'] == uid;
         }).toList()
         ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
@@ -291,11 +352,9 @@ class CampusStore extends ChangeNotifier {
                 '${n['targetFacilityId'] ?? ''}'.isEmpty ||
                 isStaff ||
                 n['targetFacilityId'] == myFacilityId ||
-                (isTeacher &&
-                    [
-                      'college',
-                      'canteen',
-                    ].contains(facility('${n['targetFacilityId']}')?['type'])),
+                (hasAcademicAccess &&
+                    ['college', 'canteen']
+                        .contains(facility('${n['targetFacilityId']}')?['type'])),
           )
           .toList()
         ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
@@ -738,10 +797,10 @@ class CampusStore extends ChangeNotifier {
     _refreshDailyUsageStream();
     _scheduleDayRollover();
     Query<Map<String, dynamic>>? requestQuery;
-    if (isStudent || isTeacher) {
+    if (isStudent || hasAcademicAccess) {
       requestQuery = _col('requests').where('requestedBy', isEqualTo: uid);
     }
-    if (isWarden) {
+    if (isAssignedSiteStaff) {
       requestQuery = _col('requests')
           .where('facilityId', isEqualTo: myFacilityId);
     }
@@ -1088,7 +1147,7 @@ class CampusStore extends ChangeNotifier {
     required String detail,
   }) async {
     if (!approved) throw StateError('Approval required');
-    if (facility(facilityId) == null ||
+    if (!reportableFacilities.any((site) => site['id'] == facilityId) ||
         floor < 0 ||
         restroom.trim().isEmpty ||
         restroom.trim().length > 120 ||
@@ -1164,12 +1223,10 @@ class CampusStore extends ChangeNotifier {
     if (role == 'admin') {
       throw StateError('Admin access requires project-owner activation and a verified account.');
     }
-    if (!roleNames.contains(role) ||
-        room.length > 80 ||
-        (facilityId.isNotEmpty && facility(facilityId) == null) ||
-        (approved && role == 'student' && facilityId.isEmpty) ||
-        (approved && role == 'warden' &&
-            facility(facilityId)?['type'] != 'hostel')) {
+    if (!validRoleFacilityAssignment(
+          role, approved, facilityId, facility(facilityId)?['type'] as String?,
+        ) ||
+        room.length > 80) {
       throw StateError('Invalid member role, room, or facility.');
     }
     final values = {
