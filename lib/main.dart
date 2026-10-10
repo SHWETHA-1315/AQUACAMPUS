@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -589,31 +591,59 @@ class ApprovalPage extends StatefulWidget {
 }
 
 class _ApprovalPageState extends State<ApprovalPage> with WidgetsBindingObserver {
+  Timer? _verificationCheckTimer;
+  bool _verificationCheckRunning = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // A new registrant may follow the link on another phone/computer, so
+    // polling lightly while this screen is open prevents a stale "unverified"
+    // page. The real verification result still comes from Firebase Auth.
+    _verificationCheckTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _checkVerification(),
+    );
   }
+
+  Future<bool?> _checkVerification({bool showError = false}) async {
+    if (_verificationCheckRunning || !mounted || !widget.store.signedIn ||
+        widget.store.emailVerified) {
+      return null;
+    }
+    _verificationCheckRunning = true;
+    try {
+      return await widget.store.refreshEmailVerification();
+    } catch (error) {
+      if (mounted && showError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyError(error))),
+        );
+      }
+      return null;
+    } finally {
+      _verificationCheckRunning = false;
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || !widget.store.signedIn) return;
     if (!widget.store.emailVerified) {
-      widget.store.refreshEmailVerification().catchError((Object error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(friendlyError(error))),
-          );
-        }
-      });
+      _checkVerification(showError: true);
     } else {
       widget.store.retrySync();
     }
   }
+
   @override
   void dispose() {
+    _verificationCheckTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
@@ -641,7 +671,7 @@ class _ApprovalPageState extends State<ApprovalPage> with WidgetsBindingObserver
                   ? 'Your login exists, but the campus profile is missing. Restore it to request Admin approval.'
                   : store.emailVerified
                   ? 'Admin will approve your account and assign your role and building.'
-                  : 'Open the link in your email, then come back and tap the button below.',
+                  : 'Open the Firebase verification link sent to your registered email. Return to the app; verification is checked automatically, or tap Refresh.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 14),
@@ -697,8 +727,10 @@ class _ApprovalPageState extends State<ApprovalPage> with WidgetsBindingObserver
             ],
             if (!store.emailVerified) ...[
               const Text(
-                'Check your inbox and Spam folder for the verification link. '
-                'Admin approval is also needed to use campus features.',
+                'Search All Mail, Spam and Promotions for a Firebase verification link. '
+                'When the link opens in your browser, confirm the action and return here. '
+                'If no email arrives even after Resend, Firebase sender settings must be '
+                'checked by the project owner. Admin approval is required after verification.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12, color: Colors.black54),
               ),
@@ -734,14 +766,14 @@ class _ApprovalPageState extends State<ApprovalPage> with WidgetsBindingObserver
               TextButton.icon(
                 onPressed: () async {
                   try {
-                    final verified = await store.refreshEmailVerification();
-                    if (!context.mounted) return;
+                    final verified = await _checkVerification(showError: true);
+                    if (!context.mounted || verified == null) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
                           verified
-                              ? 'Email verified. Await campus admin approval.'
-                              : 'Email not verified yet. Open your verification link.',
+                              ? 'Email verified. Await campus Admin approval.'
+                              : 'Firebase still shows this email as unverified. Open the email link, then return to the app.',
                         ),
                       ),
                     );
