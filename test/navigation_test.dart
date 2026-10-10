@@ -33,7 +33,7 @@ void main() {
     expect(find.text('Add building'), findsOneWidget);
     await tester.tap(find.text('Add building'));
     await tester.pumpAndSettle();
-    expect(find.text('Building name'), findsOneWidget);
+    expect(find.text('Location name (hostel, garden, vehicle wash...)'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
