@@ -98,6 +98,8 @@ void main() {
       find.text('Assign / Approve'), 150,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.text('Assign / Approve'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Assign / Approve'));
     await tester.pumpAndSettle();
     expect(find.text('Edit New Member'), findsOneWidget);
