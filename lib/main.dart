@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:intl/intl.dart';
 
 import 'campus_store.dart';
+import 'campus_alerts.dart';
 import 'water_budget.dart';
 import 'water_math.dart';
 
@@ -28,6 +30,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = CampusStore();
   await store.initialize();
+  if (store.cloud) {
+    FirebaseMessaging.onBackgroundMessage(aquaBackgroundMessage);
+  }
   runApp(AquaApp(store: store));
 }
 
@@ -857,6 +862,7 @@ String navTitle(String key) =>
       'Tanks': 'Water tanks',
       'Requests': 'Request water',
       'SOS': 'Report a problem',
+      'Alerts': 'My alerts',
       'Notices': 'Notices',
       'Members': 'People & roles',
     }[key] ??
@@ -870,6 +876,7 @@ String navHint(String key) =>
       'Tanks': 'Add tanks and enter water levels',
       'Requests': 'Ask for water or review requests',
       'SOS': 'Leaks, damage or overflow',
+      'Alerts': 'Private alerts and new updates',
       'Notices': 'Read campus updates',
       'Members': 'Add faculty and approve accounts',
     }[key] ??
@@ -918,6 +925,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    CampusAlertCenter.instance.bind(widget.store);
   }
 
   @override
@@ -930,6 +938,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    CampusAlertCenter.instance.unbind();
     super.dispose();
   }
 
@@ -946,6 +955,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       const NavItem('Tanks', Icons.water_rounded),
       const NavItem('Requests', Icons.playlist_add_check_circle_rounded),
       const NavItem('SOS', Icons.sos_rounded),
+      const NavItem('Alerts', Icons.notifications_active_outlined),
       const NavItem('Notices', Icons.campaign_rounded),
       if (s.isAdmin) const NavItem('Members', Icons.people_alt_rounded),
     ];
@@ -969,6 +979,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         break;
       case 'SOS':
         body = SOSPage(store: s);
+        break;
+      case 'Alerts':
+        body = const CampusAlertsPage();
         break;
       case 'Notices':
         body = NoticesPage(store: s);
@@ -3236,8 +3249,33 @@ class SOSPage extends StatelessWidget {
       ),
       children: [
         const InfoBanner(
-          'Admin and workers can see reports when they open the app. For urgent help, also call your campus office.',
+          'SOS is private: you and authorized water operators can see the report. '
+          'The worker siren continues until a worker explicitly silences it. '
+          'For immediate physical danger, also call campus security.',
         ),
+        if (store.isWorker) ...[
+          const InfoBanner(
+            'New unresolved SOS reports trigger a repeating Android siren '
+            'on this worker phone. Tap Silence to acknowledge the current '
+            'alarms. A later SOS will ring again.',
+            warning: true,
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              try {
+                await CampusAlertCenter.instance.silenceWorkerSiren();
+                if (context.mounted) ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content:
+                        Text('SOS siren silenced on this worker phone.')));
+              } catch (error) {
+                if (context.mounted) ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text(friendlyError(error))));
+              }
+            },
+            icon: const Icon(Icons.volume_off_rounded),
+            label: const Text('SILENCE WORKER SIREN'),
+          ),
+        ],
         if (store.isStaff) ...[
           SectionTitle('Active incidents (${active.length})'),
           if (active.isEmpty) _empty('No unresolved water emergencies'),
@@ -3256,7 +3294,8 @@ class SOSPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 7),
                 const Text(
-                  'Tell us where the problem is. Admin and water workers can read your report and mark it fixed.',
+                  'Only you and authorized water operators can read this report. '
+                  'Workers will receive an emergency alert and may mark it fixed.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
@@ -3273,6 +3312,9 @@ class SOSPage extends StatelessWidget {
               ],
             ),
           ),
+          SectionTitle('My SOS reports (${active.length + resolved.length})'),
+          for (final report in active) _alert(context, report),
+          for (final report in resolved.take(20)) _alert(context, report),
         ],
       ],
     );
@@ -3436,6 +3478,59 @@ class SOSPage extends StatelessWidget {
     restroom.dispose();
     details.dispose();
   }
+}
+
+
+class CampusAlertsPage extends StatelessWidget {
+  const CampusAlertsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: CampusAlertCenter.instance,
+    builder: (context, _) {
+      final alerts = CampusAlertCenter.instance.history;
+      return ScreenBody(
+        title: 'My private alerts',
+        subtitle: 'Water requests, notices, tank readings and SOS updates.',
+        children: [
+          const InfoBanner(
+            'Only this signed-in account can view its personal alert history. '
+            'Android notifications show generic text, never names, email addresses '
+            'or confidential incident descriptions. Background delivery needs '
+            'the owner-authorized Firebase push sender.',
+          ),
+          if (CampusAlertCenter.instance.isWorker)
+            FilledButton.icon(
+              onPressed: () async {
+                try {
+                  await CampusAlertCenter.instance.silenceWorkerSiren();
+                } catch (error) {
+                  if (context.mounted) ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text(friendlyError(error))));
+                }
+              },
+              icon: const Icon(Icons.volume_off),
+              label: const Text('Silence my SOS siren'),
+            ),
+          if (alerts.isEmpty)
+            _empty('No new alerts yet. Relevant updates appear here when data changes.'),
+          for (final event in alerts)
+            Surface(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(event.title,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 5),
+                Text(event.description),
+                const SizedBox(height: 7),
+                Text(briefTime(event.at.toIso8601String()),
+                    style: const TextStyle(color: Colors.black54, fontSize: 11)),
+              ],
+            )),
+        ],
+      );
+    },
+  );
 }
 
 class NoticesPage extends StatelessWidget {
