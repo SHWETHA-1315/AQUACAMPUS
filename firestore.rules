@@ -29,11 +29,25 @@ service cloud.firestore {
         tank.lengthCm * tank.widthCm * depth / 1000.0 :
         3.141592653589793 * tank.diameterCm * tank.diameterCm * depth / 4000.0;
     }
+    // All new roles require an explicit Admin assignment. A canteen worker,
+    // gardener or driver cannot request water from a different department.
+    function isAssignedSiteRole() {
+      return role() in ['student', 'warden', 'canteen', 'gardener', 'driver'];
+    }
+    function requiredSiteType() {
+      return role() == 'warden' ? 'hostel' :
+        role() == 'canteen' ? 'canteen' :
+        role() == 'gardener' ? 'garden' :
+        role() == 'driver' ? 'transport' : '';
+    }
     function canUseFacility(campus, fid) {
       return active() && facilityExists(campus, fid) && (
         isStaff() ||
-        (role() in ['student', 'warden'] && myFacility() == fid) ||
-        (role() == 'teacher' && facilityType(campus, fid) in ['college', 'canteen'])
+        (isAssignedSiteRole() && myFacility() == fid &&
+          (requiredSiteType() == '' ||
+            facilityType(campus, fid) == requiredSiteType())) ||
+        (role() in ['teacher', 'staff'] &&
+          facilityType(campus, fid) in ['college', 'canteen'])
       );
     }
 
@@ -73,7 +87,9 @@ service cloud.firestore {
         resource.data.campusId == 'main' &&
         request.resource.data.campusId == resource.data.campusId &&
         request.resource.data.email == resource.data.email &&
-        request.resource.data.role in ['worker','warden','student','teacher'] &&
+        request.resource.data.role in [
+          'worker','warden','student','teacher','staff','canteen','gardener','driver'
+        ] &&
         request.resource.data.approved is bool &&
         request.resource.data.facilityId is string &&
         request.resource.data.room is string &&
@@ -88,10 +104,13 @@ service cloud.firestore {
           (request.resource.data.facilityId != '' &&
            facilityExists('main', request.resource.data.facilityId))) &&
         (!request.resource.data.approved ||
-          request.resource.data.role != 'warden' ||
+          !(request.resource.data.role in ['warden','canteen','gardener','driver']) ||
           (request.resource.data.facilityId != '' &&
            facilityExists('main', request.resource.data.facilityId) &&
-           facilityType('main', request.resource.data.facilityId) == 'hostel'));
+           facilityType('main', request.resource.data.facilityId) ==
+             (request.resource.data.role == 'warden' ? 'hostel' :
+              request.resource.data.role == 'canteen' ? 'canteen' :
+              request.resource.data.role == 'gardener' ? 'garden' : 'transport')));
       allow delete: if false;
     }
 
@@ -109,7 +128,7 @@ service cloud.firestore {
               'lowWaterThresholdLitres','essentialLitresPerResident','createdAt',
               'updatedAt','updatedBy'
             ]) &&
-            request.resource.data.type in ['hostel','college','canteen'] &&
+            request.resource.data.type in ['hostel','college','canteen','garden','transport'] &&
             request.resource.data.name is string &&
             request.resource.data.name.size() > 0 &&
             request.resource.data.name.size() <= 120 &&
@@ -221,7 +240,8 @@ service cloud.firestore {
       match /requests/{requestId} {
         allow get, list: if active() && campus == 'main' && (
           isStaff() ||
-          (role() == 'warden' && resource.data.facilityId == myFacility()) ||
+          (role() in ['warden','canteen','gardener','driver'] &&
+            resource.data.facilityId == myFacility()) ||
           resource.data.requestedBy == request.auth.uid
         );
         allow create: if campus == 'main' &&
@@ -238,7 +258,8 @@ service cloud.firestore {
             request.resource.data.peopleCount * request.resource.data.litresPerPerson + 0.01 &&
           request.resource.data.approvedLitres == 0 &&
           request.resource.data.activity in [
-            'Bathing','Laundry','Room cleaning','Cooking','Utensil washing','Other'
+            'Bathing','Laundry','Room cleaning','Cooking','Utensil washing',
+            'Garden irrigation','Vehicle washing','Other'
           ] &&
           request.resource.data.litresPerPerson is number &&
           request.resource.data.litresPerPerson > 0 &&
