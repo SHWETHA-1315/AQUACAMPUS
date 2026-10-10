@@ -51,6 +51,7 @@ class CampusAlertCenter extends ChangeNotifier {
   final Map<String, String> _incidents = {};
   final List<CampusAlertEntry> _history = [];
   StreamSubscription<String>? _tokenRefresh;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _inboxSubscription;
   StreamSubscription<RemoteMessage>? _foreground;
   StreamSubscription<RemoteMessage>? _opened;
   String? _deviceId;
@@ -78,6 +79,26 @@ class CampusAlertCenter extends ChangeNotifier {
       }
     }
     notifyListeners();
+    try {
+      // Cloud-delivered inbox is readable ONLY by its account owner.
+      // When the sender has not been deployed, this collection stays empty.
+      _inboxSubscription = FirebaseFirestore.instance
+          .collection('users').doc(_uid).collection('inbox')
+          .orderBy('createdAt', descending: true).limit(100)
+          .snapshots().listen((snapshot) {
+            if (_store == null || _uid != store.uid) return;
+            for (final doc in snapshot.docs) {
+              final data = doc.data();
+              _record('inbox:${doc.id}',
+                  '${data['title'] ?? 'Campus update'}',
+                  '${data['description'] ?? 'An update is available.'}');
+            }
+          }, onError: (Object error) {
+            debugPrint('Private inbox feed unavailable: ${error.runtimeType}');
+          });
+    } catch (error) {
+      debugPrint('Private inbox disabled: ${error.runtimeType}');
+    }
     try {
       final messaging = FirebaseMessaging.instance;
       await messaging.requestPermission(alert: true, badge: true, sound: true);
@@ -247,6 +268,8 @@ class CampusAlertCenter extends ChangeNotifier {
     _incidents.clear();
     _history.clear();
     await _tokenRefresh?.cancel();
+    await _inboxSubscription?.cancel();
+    _inboxSubscription = null;
     await _foreground?.cancel();
     await _opened?.cancel();
     _tokenRefresh = null;

@@ -417,3 +417,63 @@ test('both admins can assign canteen, gardener, driver and college staff safely'
     approved:true,role:'admin'
   }));
 });
+
+test('notification device tokens and inbox are private to the account', async()=>{
+  const student=context('student','student@campus.test');
+  const other=context('second','second@campus.test');
+  const pathToken='users/student/devices/phone-one';
+  const sample={token:'abcdefghijabcdefghij1234567890',platform:'android',updatedAt:time};
+  await assertSucceeds(setDoc(doc(student,pathToken),sample));
+  await assertSucceeds(getDoc(doc(student,pathToken)));
+  await assertFails(getDoc(doc(other,pathToken)));
+  await assertFails(setDoc(doc(other,pathToken),sample));
+  await assertFails(setDoc(doc(student,'users/second/devices/hacked'),sample));
+  await assertFails(setDoc(doc(student,'users/student/inbox/hacked'),
+      {title:'Spoof',description:'Forged notification'}));
+  await env.withSecurityRulesDisabled(async(ctx)=>{
+    await setDoc(doc(ctx.firestore(),'users/student/inbox/real'),
+      {title:'Water request',description:'Your request has changed',createdAt:time});
+  });
+  await assertSucceeds(getDoc(doc(student,'users/student/inbox/real')));
+  await assertFails(getDoc(doc(other,'users/student/inbox/real')));
+  await assertFails(getDocs(collection(other,'users/student/inbox')));
+});
+
+test('notices addressed to one campus area cannot be read by another',async()=>{
+  const admin=context('admin','admin@campus.test');
+  await assertSucceeds(setDoc(doc(admin,path('notices','canteen-only')),
+      {targetFacilityId:'canteen-1',message:'Canteen shift schedule',
+       createdBy:'admin',createdAt:time}));
+  const canteen=context('canteen','canteen@campus.test');
+  const student=context('student','student@campus.test');
+  const teacher=context('teacher','teacher@campus.test');
+  await assertSucceeds(getDoc(doc(canteen,path('notices','canteen-only'))));
+  await assertSucceeds(getDoc(doc(teacher,path('notices','canteen-only'))));
+  await assertFails(getDoc(doc(student,path('notices','canteen-only'))));
+  await assertFails(getDocs(collection(student,'campuses/main/notices')));
+  await assertSucceeds(getDocs(query(collection(student,'campuses/main/notices'),
+      where('targetFacilityId','==',''))));
+});
+test('incident reporter reads only their SOS and cannot read other students',async()=>{
+  const student=context('student','student@campus.test');
+  const other=context('second','second@campus.test');
+  const worker=context('worker','worker@campus.test');
+  await assertSucceeds(setDoc(doc(student,path('sos','own-incident')),{
+    facilityId:'hostel-1',floor:1,restroom:'Restroom 1',
+    detail:'Water leakage requiring repairs',createdBy:'student',
+    createdByName:'Student',status:'open',createdAt:time,resolvedAt:''
+  }));
+  await assertSucceeds(getDocs(query(collection(student,'campuses/main/sos'),
+      where('createdBy','==','student'))));
+  await assertFails(getDocs(collection(student,'campuses/main/sos')));
+  await assertFails(getDoc(doc(other,path('sos','own-incident'))));
+  await assertSucceeds(getDoc(doc(worker,path('sos','own-incident'))));
+});
+test('same-hostel students cannot access each others water submissions',async()=>{
+  const student=context('student','student@campus.test');
+  const second=context('second','second@campus.test');
+  const warden=context('warden','warden@campus.test');
+  await assertFails(getDoc(doc(second,path('requests','request-1'))));
+  await assertFails(getDoc(doc(warden,path('requests','request-1'))));
+  await assertSucceeds(getDoc(doc(student,path('requests','request-1'))));
+});

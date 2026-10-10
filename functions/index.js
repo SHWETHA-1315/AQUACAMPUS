@@ -6,6 +6,7 @@ const {onDocumentCreated, onDocumentUpdated} = require('firebase-functions/v2/fi
 const {initializeApp} = require('firebase-admin/app');
 const {getFirestore} = require('firebase-admin/firestore');
 const {getMessaging} = require('firebase-admin/messaging');
+const {getAuth} = require('firebase-admin/auth');
 initializeApp();
 const db = getFirestore();
 const region = 'asia-south1';
@@ -45,6 +46,8 @@ async function deliver(eventId, kind, copy, users) {
       const profile = await db.doc('users/'+uid).get();
       if (!profile.exists || profile.data().approved !== true ||
           profile.data().campusId !== 'main') continue;
+      const authUser = await getAuth().getUser(uid);
+      if (authUser.disabled || authUser.emailVerified !== true) continue;
       const notification = db.doc('users/'+uid+'/inbox/'+eventId);
       // Idempotent inbox record; no sensitive document data is copied.
       try {
