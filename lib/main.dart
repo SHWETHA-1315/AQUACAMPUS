@@ -581,11 +581,43 @@ class _EntryPageState extends State<EntryPage> {
   }
 }
 
-class ApprovalPage extends StatelessWidget {
+class ApprovalPage extends StatefulWidget {
   const ApprovalPage({super.key, required this.store});
   final CampusStore store;
   @override
-  Widget build(BuildContext context) => Scaffold(
+  State<ApprovalPage> createState() => _ApprovalPageState();
+}
+
+class _ApprovalPageState extends State<ApprovalPage> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !widget.store.signedIn) return;
+    if (!widget.store.emailVerified) {
+      widget.store.refreshEmailVerification().catchError((Object error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(friendlyError(error))),
+          );
+        }
+      });
+    } else {
+      widget.store.retrySync();
+    }
+  }
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    final store = widget.store;
+    return Scaffold(
     appBar: AppBar(title: const Text('AQUACAMPUS')),
     body: SafeArea(
       child: SingleChildScrollView(
@@ -652,6 +684,17 @@ class ApprovalPage extends StatelessWidget {
                 warning: true,
               ),
             ],
+            if (!store.emailVerified &&
+                store.lastVerificationRequestAcceptedAt != null) ...[
+              InfoBanner(
+                'Firebase accepted a verification request at '
+                '${DateFormat('h:mm a').format(store.lastVerificationRequestAcceptedAt!.toLocal())}. '
+                'This is NOT a delivery confirmation. Check All Mail/Spam/Promotions. '
+                'If nothing arrives, the Firebase project owner must check '
+                'Authentication > Templates > Email address verification '
+                'and SMTP/sender settings.',
+              ),
+            ],
             if (!store.emailVerified) ...[
               const Text(
                 'Check your inbox and Spam folder for the verification link. '
@@ -661,14 +704,16 @@ class ApprovalPage extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               FilledButton.icon(
-                onPressed: () async {
+                onPressed: !store.canRequestVerificationEmail
+                    ? null
+                    : () async {
                   try {
                     await store.resendEmailVerification();
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text(
-                          'Firebase accepted the verification request. Check Inbox and Spam, and confirm your account address.',
+                          'Firebase accepted a verification request (inbox delivery not guaranteed). Check Spam and All Mail; retry after one minute.',
                         ),
                       ),
                     );
@@ -680,7 +725,11 @@ class ApprovalPage extends StatelessWidget {
                   }
                 },
                 icon: const Icon(Icons.mark_email_unread_outlined),
-                label: const Text('Resend verification email'),
+                label: Text(
+                  store.canRequestVerificationEmail
+                      ? 'Resend verification email'
+                      : 'Wait one minute before resending',
+                ),
               ),
               TextButton.icon(
                 onPressed: () async {
@@ -736,6 +785,7 @@ class ApprovalPage extends StatelessWidget {
       ),
     ),
   );
+  }
 }
 
 String _nice(String s) =>
