@@ -2750,13 +2750,15 @@ class TanksPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: facilityId,
                   decoration: const InputDecoration(labelText: 'Location'),
                   items: [
                     for (final f in store.facilities)
                       DropdownMenuItem(
                         value: '${f['id']}',
-                        child: Text('${f['name']}'),
+                        child: Text('${f['name']}', maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
                       ),
                   ],
                   onChanged: (v) =>
@@ -3030,13 +3032,15 @@ class RequestsPage extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: facilityId,
                   decoration: const InputDecoration(labelText: 'Location'),
                   items: [
                     for (final f in choices)
                       DropdownMenuItem(
                         value: '${f['id']}',
-                        child: Text('${f['name']}'),
+                        child: Text('${f['name']}', maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
                       ),
                   ],
                   onChanged: (v) =>
@@ -3344,6 +3348,7 @@ class SOSPage extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: facilityId,
                   decoration: const InputDecoration(
                     labelText: 'Building / Hostel / Canteen',
@@ -3352,7 +3357,8 @@ class SOSPage extends StatelessWidget {
                     for (final f in locations)
                       DropdownMenuItem(
                         value: '${f['id']}',
-                        child: Text('${f['name']}'),
+                        child: Text('${f['name']}', maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
                       ),
                   ],
                   onChanged: (v) =>
@@ -3493,10 +3499,12 @@ class NoticesPage extends StatelessWidget {
       builder: (dialog) => StatefulBuilder(
         builder: (ctx, setDialog) => AlertDialog(
           title: const Text('Send campus broadcast'),
-          content: Column(
+          content: SingleChildScrollView(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 initialValue: target,
                 decoration: const InputDecoration(labelText: 'Target audience'),
                 items: [
@@ -3521,6 +3529,7 @@ class NoticesPage extends StatelessWidget {
                 ),
               ),
             ],
+            ),
           ),
           actions: [
             TextButton(
@@ -3659,6 +3668,7 @@ class MembersPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
+                  key: ValueKey('member-role-$role'),
                   isExpanded: true,
                   initialValue: role,
                   decoration: const InputDecoration(labelText: 'Role'),
@@ -3668,14 +3678,20 @@ class MembersPage extends StatelessWidget {
                   ],
                   onChanged: (v) => setDialog(() {
                     role = v ?? role;
-                    final needed = requiredFacilityTypeForRole(role);
-                    if (needed != null && store.facility(facilityId)?['type'] != needed) {
+                    // A role change must clear incompatible previous site
+                    // assignments rather than silently save the old site.
+                    final selectedType = store.facility(facilityId)?['type'] as String?;
+                    if (facilityId.isNotEmpty &&
+                        !validRoleFacilityAssignment(
+                          role, true, facilityId, selectedType,
+                        )) {
                       facilityId = '';
                     }
                   }),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
+                  key: ValueKey('member-site-$role-$facilityId'),
                   isExpanded: true,
                   initialValue: store.facility(facilityId) == null
                       ? ''
@@ -3689,8 +3705,9 @@ class MembersPage extends StatelessWidget {
                       child: Text('None / all buildings'),
                     ),
                     for (final f in store.facilities.where((f) =>
-                        requiredFacilityTypeForRole(role) == null ||
-                        f['type'] == requiredFacilityTypeForRole(role)))
+                        validRoleFacilityAssignment(
+                          role, true, '${f['id']}', f['type'] as String?,
+                        )))
                       DropdownMenuItem(
                         value: '${f['id']}',
                         child: Text('${f['name']}', overflow: TextOverflow.ellipsis, maxLines: 1),

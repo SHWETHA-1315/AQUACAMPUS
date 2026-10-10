@@ -31,6 +31,12 @@ bool validRoleFacilityAssignment(
   if (facilityId.isNotEmpty && facilityType == null) return false;
   if (!approved) return true;
   if (role == 'student' && facilityId.isEmpty) return false;
+  // Academic personnel can be unassigned or attached to college/canteen
+  // locations, never silently assigned to an unrelated hostel or garden.
+  if ((role == 'teacher' || role == 'staff') && facilityId.isNotEmpty &&
+      facilityType != 'college' && facilityType != 'canteen') {
+    return false;
+  }
   final requiredType = requiredFacilityTypeForRole(role);
   return requiredType == null ||
       (facilityId.isNotEmpty && facilityType == requiredType);
