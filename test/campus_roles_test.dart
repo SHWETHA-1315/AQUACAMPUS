@@ -110,7 +110,7 @@ void main() {
     tester.view.devicePixelRatio=1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    for(final pair in [['gardener','Garden irrigation'],['driver','vehicle wash']]){
+    for(final pair in [['gardener','irrigation water'],['driver','vehicle wash water']]){
       final store=RoleStore(pair[0],pair[0]=='gardener'?'garden-1':'transport-1');
       await tester.pumpWidget(MaterialApp(home:AppShell(store:store)));
       expect(find.textContaining(pair[1],findRichText:true),findWidgets);
