@@ -85,7 +85,12 @@ void main() {
   testWidgets('New registrant automatically checks real verification on a timer',
       (tester) async {
     final store = OnboardingTestStore()..signedIn = true;
-    await tester.pumpWidget(MaterialApp(home: ApprovalPage(store: store)));
+    await tester.pumpWidget(MaterialApp(
+      home: AnimatedBuilder(
+        animation: store,
+        builder: (context, _) => ApprovalPage(store: store),
+      ),
+    ));
     expect(store.verificationRefreshes, 0);
     await tester.pump(const Duration(seconds: 31));
     expect(store.verificationRefreshes, 1);
