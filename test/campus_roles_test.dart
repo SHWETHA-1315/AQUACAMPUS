@@ -81,7 +81,8 @@ void main() {
       final store=RoleStore(choice[0],choice[1]);
       expect(store.visibleFacilities.map((x)=>x['id']),[choice[1]]);
       expect(store.visibleTanks.map((x)=>x['facilityId']),[choice[1]]);
-      expect(store.visibleRequests.map((x)=>x['id']),isEmpty);
+      // Own request remains private even if the user changes assigned site.
+      expect(store.visibleRequests.map((x)=>x['id']),['mine']);
       expect(store.reportableFacilities.map((x)=>x['id']),[choice[1]]);
       expect(store.isAdmin,isFalse);
       expect(store.isStaff,isFalse);
