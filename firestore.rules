@@ -51,6 +51,13 @@ service cloud.firestore {
       // Members cannot elevate privileges by setting their own role or approval.
       allow create: if signedIn() && request.auth.uid == userId &&
         request.resource.data.keys().hasAll(['name','email','role','facilityId','room','approved','campusId','createdAt']) &&
+        request.resource.data.keys().hasOnly(['name','email','role','facilityId','room','approved','campusId','createdAt']) &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() >= 2 &&
+        request.resource.data.name.size() <= 120 &&
+        request.resource.data.email is string &&
+        request.resource.data.createdAt is string &&
+        request.resource.data.createdAt.size() > 0 &&
         request.resource.data.role == 'student' &&
         request.resource.data.approved == false &&
         request.resource.data.facilityId == '' &&
@@ -75,7 +82,16 @@ service cloud.firestore {
           'role','approved','facilityId','room'
         ]) &&
         (request.resource.data.facilityId == '' ||
-          facilityExists('main', request.resource.data.facilityId));
+          facilityExists('main', request.resource.data.facilityId)) &&
+        (!request.resource.data.approved ||
+          request.resource.data.role != 'student' ||
+          (request.resource.data.facilityId != '' &&
+           facilityExists('main', request.resource.data.facilityId))) &&
+        (!request.resource.data.approved ||
+          request.resource.data.role != 'warden' ||
+          (request.resource.data.facilityId != '' &&
+           facilityExists('main', request.resource.data.facilityId) &&
+           facilityType('main', request.resource.data.facilityId) == 'hostel'));
       allow delete: if false;
     }
 
