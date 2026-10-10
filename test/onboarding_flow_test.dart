@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 class OnboardingTestStore extends CampusStore {
   bool verified = false;
   int emailResends = 0;
+  int verificationRefreshes = 0;
   int approvalRefreshes = 0;
   int memberSaves = 0;
   String? savedRole;
@@ -35,6 +36,12 @@ class OnboardingTestStore extends CampusStore {
     emailResends++;
     verificationDeliveryError = null;
     notifyListeners();
+  }
+
+  @override
+  Future<bool> refreshEmailVerification() async {
+    verificationRefreshes++;
+    return verified;
   }
 
   @override
@@ -72,6 +79,22 @@ void main() {
     await tester.tap(find.text('Resend verification email'));
     await tester.pumpAndSettle();
     expect(store.emailResends, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('New registrant automatically checks real verification on a timer',
+      (tester) async {
+    final store = OnboardingTestStore()..signedIn = true;
+    await tester.pumpWidget(MaterialApp(home: ApprovalPage(store: store)));
+    expect(store.verificationRefreshes, 0);
+    await tester.pump(const Duration(seconds: 31));
+    expect(store.verificationRefreshes, 1);
+    store.verified = true;
+    store.notifyListeners();
+    await tester.pump(const Duration(seconds: 31));
+    expect(store.verificationRefreshes, 1);
+    expect(find.text('Waiting for Admin'), findsOneWidget);
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     expect(tester.takeException(), isNull);
   });
 
