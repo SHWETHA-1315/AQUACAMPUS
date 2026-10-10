@@ -2138,8 +2138,10 @@ class FacilitiesPage extends StatelessWidget {
                       ),
                   ],
                 ),
-                _labelValue('Floors', '${f['floors']}'),
-                _labelValue('Restrooms', '${f['restrooms']}'),
+                if (type != 'garden' && type != 'transport') ...[
+                  _labelValue('Floors', '${f['floors']}'),
+                  _labelValue('Restrooms', '${f['restrooms']}'),
+                ],
                 if (type == 'hostel')
                   _labelValue('Residents', '${f['occupants']}'),
                 if (type == 'canteen')
@@ -2345,37 +2347,39 @@ class FacilitiesPage extends StatelessWidget {
       context: context,
       builder: (dialog) => StatefulBuilder(
         builder: (context, setDialog) => AlertDialog(
-          title: const Text('Add building'),
+          title: const Text('Add campus location'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: name,
-                  decoration: const InputDecoration(labelText: 'Building name'),
+                  decoration: const InputDecoration(labelText: 'Location name (hostel, garden, vehicle wash...)'),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: type,
-                  decoration: const InputDecoration(labelText: 'Building type'),
+                  decoration: const InputDecoration(labelText: 'Location type'),
                   items: [
                     for (final t in facilityTypes)
                       DropdownMenuItem(value: t, child: Text(_nice(t))),
                   ],
                   onChanged: (v) => setDialog(() => type = v ?? type),
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: floors,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Floors'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: toilets,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Restrooms'),
-                ),
+                if (type != 'garden' && type != 'transport') ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: floors,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Floors'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: toilets,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Restrooms'),
+                  ),
+                ],
                 if (type == 'hostel') ...[
                   const SizedBox(height: 10),
                   TextField(
@@ -2431,8 +2435,10 @@ class FacilitiesPage extends StatelessWidget {
             ElevatedButton(
               onPressed: () async {
                 final p = int.tryParse(people.text),
-                    fl = int.tryParse(floors.text),
-                    r = int.tryParse(toilets.text),
+                    fl = (type == 'garden' || type == 'transport')
+                        ? 1 : int.tryParse(floors.text),
+                    r = (type == 'garden' || type == 'transport')
+                        ? 0 : int.tryParse(toilets.text),
                     c = double.tryParse(cap.text),
                     low = double.tryParse(threshold.text),
                     rate = double.tryParse(essential.text);
@@ -2474,7 +2480,7 @@ class FacilitiesPage extends StatelessWidget {
                         ? rate ?? 1
                         : 1,
                   ),
-                  success: 'Building added',
+                  success: 'Campus location added',
                 );
                 if (saved && context.mounted) Navigator.pop(context);
               },
