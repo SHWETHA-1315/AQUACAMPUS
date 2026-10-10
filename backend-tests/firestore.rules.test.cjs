@@ -62,6 +62,10 @@ test.beforeEach(async () => {
       ['student','student@campus.test','student',true,'hostel-1'],
       ['second','second@campus.test','student',true,'hostel-1'],
       ['teacher','teacher@campus.test','teacher',true,''],
+      ['staff','staff@campus.test','staff',true,''],
+      ['canteen','canteen@campus.test','canteen',true,'canteen-1'],
+      ['gardener','gardener@campus.test','gardener',true,'garden-1'],
+      ['driver','driver@campus.test','driver',true,'transport-1'],
       ['daystudent','daystudent@campus.test','student',true,'canteen-1'],
       ['pending','pending@campus.test','student',false,''],
     ]) {
@@ -69,6 +73,8 @@ test.beforeEach(async () => {
     }
     await setDoc(doc(db, path('facilities','hostel-1')),facility());
     await setDoc(doc(db, path('facilities','canteen-1')),facility('canteen'));
+    await setDoc(doc(db, path('facilities','garden-1')),facility('garden'));
+    await setDoc(doc(db, path('facilities','transport-1')),facility('transport'));
     await setDoc(doc(db, path('tanks','tank-1')),tank());
     await setDoc(doc(db,path('requests','request-1')),waterRequest());
     await setDoc(doc(db,path('requests','second-request')),waterRequest('second'));
@@ -317,5 +323,92 @@ test('both Admins can approve staff but cannot approve unassigned students or no
   }));
   await assertSucceeds(updateDoc(doc(admin2,'users','pending'),{
     approved:true,role:'warden',facilityId:'hostel-1',room:'105'
+  }));
+});
+
+test('college staff may request academic or canteen water, but cannot view hostel requests', async () => {
+  const db = context('staff', 'staff@campus.test');
+  await assertSucceeds(setDoc(doc(db,path('requests','staff-campus')),
+    {...waterRequest('staff'),facilityId:'canteen-1',room:''}));
+  await assertSucceeds(setDoc(doc(db,path('requests','staff-academic')),
+    {...waterRequest('staff'),facilityId:'canteen-1',room:'',activity:'Cooking'}));
+  await assertFails(setDoc(doc(db,path('requests','staff-hostel')),
+    {...waterRequest('staff'),facilityId:'hostel-1',room:''}));
+  await assertFails(getDoc(doc(db,path('requests','request-1'))));
+  await assertSucceeds(getDocs(query(collection(db,'campuses/main/requests'),
+    where('requestedBy','==','staff'))));
+  await assertFails(getDocs(collection(db,'campuses/main/requests')));
+});
+
+test('canteen, gardener and driver see only assigned site water requests', async () => {
+  for (const [id,site,activity] of [
+    ['canteen','canteen-1','Cooking'],
+    ['gardener','garden-1','Garden irrigation'],
+    ['driver','transport-1','Vehicle washing'],
+  ]) {
+    const db=context(id,id+'@campus.test');
+    await assertSucceeds(setDoc(doc(db,path('requests',id+'-own')),
+      {...waterRequest(id),facilityId:site,activity,room:''}));
+    await assertFails(setDoc(doc(db,path('requests',id+'-cross')),
+      {...waterRequest(id),facilityId:'hostel-1',room:''}));
+    await assertSucceeds(getDocs(query(collection(db,'campuses/main/requests'),
+      where('facilityId','==',site))));
+    await assertFails(getDocs(collection(db,'campuses/main/requests')));
+    await assertFails(getDoc(doc(db,path('requests','request-1'))));
+    await assertFails(updateDoc(doc(db,path('requests',id+'-own')),{
+      status:'approved',approvedLitres:12,approvedBy:id,reviewedAt:time
+    }));
+  }
+});
+
+test('canteen, gardener and driver may report SOS only within assigned site', async () => {
+  for(const [id,site] of [
+    ['canteen','canteen-1'],
+    ['gardener','garden-1'],
+    ['driver','transport-1'],
+  ]){
+    const db=context(id,id+'@campus.test');
+    const alert={facilityId:site,floor:0,restroom:'Water point',
+      detail:'Water pipe leakage at this facility',createdBy:id,createdByName:id,
+      status:'open',createdAt:time,resolvedAt:''};
+    await assertSucceeds(setDoc(doc(db,path('sos','sos-'+id)),alert));
+    await assertFails(setDoc(doc(db,path('sos','fake-'+id)),
+      {...alert,facilityId:'hostel-1'}));
+    await assertFails(getDocs(collection(db,'campuses/main/sos')));
+    await assertFails(updateDoc(doc(db,path('sos','sos-'+id)),
+      {status:'resolved',resolvedAt:time,resolvedBy:id}));
+    await assertFails(updateDoc(doc(db,'users',id),{
+      role:'admin',approved:true
+    }));
+  }
+});
+
+test('both admins can assign canteen, gardener, driver and college staff safely', async()=>{
+  for (const [adminId,role,site] of [
+    ['admin','canteen','canteen-1'],
+    ['admin2','gardener','garden-1'],
+    ['admin','driver','transport-1'],
+    ['admin2','staff',''],
+  ]) {
+    const db=context(adminId,adminId+'@campus.test');
+    await assertSucceeds(updateDoc(doc(db,'users','pending'),{
+      approved:true,role,facilityId:site,room:''
+    }));
+  }
+  const admin=context('admin','admin@campus.test');
+  await assertFails(updateDoc(doc(admin,'users','pending'),{
+    approved:true,role:'gardener',facilityId:'hostel-1'
+  }));
+  await assertFails(updateDoc(doc(admin,'users','pending'),{
+    approved:true,role:'driver',facilityId:'canteen-1'
+  }));
+  await assertFails(updateDoc(doc(admin,'users','pending'),{
+    approved:true,role:'canteen',facilityId:'garden-1'
+  }));
+  await assertFails(updateDoc(doc(admin,'users','pending'),{
+    approved:true,role:'gardener',facilityId:''
+  }));
+  await assertFails(updateDoc(doc(admin,'users','pending'),{
+    approved:true,role:'admin'
   }));
 });
