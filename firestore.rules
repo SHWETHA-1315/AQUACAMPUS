@@ -112,6 +112,25 @@ service cloud.firestore {
               request.resource.data.role == 'canteen' ? 'canteen' :
               request.resource.data.role == 'gardener' ? 'garden' : 'transport')));
       allow delete: if false;
+      // Device tokens are private. They are not public directories, and
+      // clients cannot fetch tokens owned by any other account.
+      match /devices/{deviceId} {
+        allow get, list: if active() && request.auth.uid == userId;
+        allow create, update: if active() && request.auth.uid == userId &&
+          request.resource.data.keys().hasOnly(['token','platform','updatedAt']) &&
+          request.resource.data.keys().hasAll(['token','platform','updatedAt']) &&
+          request.resource.data.token is string &&
+          request.resource.data.token.size() >= 20 &&
+          request.resource.data.token.size() <= 4096 &&
+          request.resource.data.platform == 'android' &&
+          request.resource.data.updatedAt is string;
+        allow delete: if signedIn() && request.auth.uid == userId;
+      }
+      // A server-generated notification inbox is always private to its user.
+      match /inbox/{eventId} {
+        allow get, list: if active() && request.auth.uid == userId;
+        allow create, update, delete: if false;
+      }
     }
 
     match /campuses/{campus} {
@@ -240,8 +259,6 @@ service cloud.firestore {
       match /requests/{requestId} {
         allow get, list: if active() && campus == 'main' && (
           isStaff() ||
-          (role() in ['warden','canteen','gardener','driver'] &&
-            resource.data.facilityId == myFacility()) ||
           resource.data.requestedBy == request.auth.uid
         );
         allow create: if campus == 'main' &&
@@ -304,8 +321,10 @@ service cloud.firestore {
       }
 
       match /sos/{alertId} {
-        // Even the reporter cannot read the incident feed. No student/teacher/warden leaks.
-        allow get, list: if isStaff() && campus == 'main';
+        // A reporter can view only their own incidents. Operators need the
+        // complete emergency queue to respond; others see no incident data.
+        allow get, list: if active() && campus == 'main' &&
+          (isStaff() || resource.data.createdBy == request.auth.uid);
         allow create: if campus == 'main' &&
           canReportSOS(campus, request.resource.data.facilityId) &&
           request.resource.data.createdBy == request.auth.uid &&
@@ -325,7 +344,18 @@ service cloud.firestore {
       }
 
       match /notices/{noticeId} {
-        allow read: if active() && campus == 'main';
+        // Do not let a member read a message addressed to another site.
+        allow get, list: if active() && campus == 'main' && (
+          isStaff() ||
+          resource.data.targetFacilityId == '' ||
+          resource.data.targetFacilityId == myFacility() ||
+          (role() in ['teacher','staff'] &&
+            resource.data.targetFacilityId is string &&
+            resource.data.targetFacilityId != '' &&
+            facilityExists(campus, resource.data.targetFacilityId) &&
+            facilityType(campus, resource.data.targetFacilityId)
+              in ['college','canteen'])
+        );
         allow create: if isAdmin() && campus == 'main' &&
           request.resource.data.createdBy == request.auth.uid &&
           request.resource.data.message is string &&

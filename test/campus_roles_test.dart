@@ -81,7 +81,7 @@ void main() {
       final store=RoleStore(choice[0],choice[1]);
       expect(store.visibleFacilities.map((x)=>x['id']),[choice[1]]);
       expect(store.visibleTanks.map((x)=>x['facilityId']),[choice[1]]);
-      expect(store.visibleRequests.map((x)=>x['facilityId']),[choice[1]]);
+      expect(store.visibleRequests.map((x)=>x['id']),isEmpty);
       expect(store.reportableFacilities.map((x)=>x['id']),[choice[1]]);
       expect(store.isAdmin,isFalse);
       expect(store.isStaff,isFalse);

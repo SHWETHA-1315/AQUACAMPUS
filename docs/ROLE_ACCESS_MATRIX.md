@@ -9,13 +9,13 @@ other user only AFTER registration; users cannot select their own privileged rol
 | --- | --- | --- |
 | Admin 1 / Admin 2 | All campus sites, requests and SOS | Create/edit facilities and tanks, assign member roles, approve/reject requests, log water deliveries, read tank history, close SOS, send notices |
 | Water Worker (`worker`) | All campus sites and requests | Enter manual tank readings, approve/reject requests, record deliveries, handle SOS |
-| Warden (`warden`) | Exactly the assigned **Hostel** | Hostel/room water demand, request water, see tanks, report SOS, read notices |
+| Warden (`warden`) | Assigned **Hostel** and own requests only | Request water, see assigned tanks, report SOS, read relevant notices; no other resident's personal submissions |
 | Student (`student`) | Assigned building/hostel requests; can also report academic/canteen leaks | Request water, track own request status, monitor assigned water tanks, report issues |
 | Teacher (`teacher`) | College/Canteen locations; own submitted water requests | Request water for teaching and canteen use, view tanks, report water issues |
 | College Staff (`staff`) | College/Canteen locations; own submitted water requests | Request and track campus water, view tanks, report issues |
-| Canteen Staff (`canteen`) | Exactly the assigned **Canteen** | Kitchen water demand, see canteen-wide requests and tank status, report SOS, read notices |
-| Gardener (`gardener`) | Exactly the assigned **Garden** | Request irrigation water, see garden demand and tank readings, report leaking irrigation pipes, read notices |
-| Driver (`driver`) | Exactly the assigned **Transport** area | Request vehicle wash water, track transport-area demand and tanks, report water leaks, read notices |
+| Canteen Staff (`canteen`) | Exactly assigned **Canteen**; own requests only | Kitchen water demand and assigned tank status, report SOS, read relevant notices |
+| Gardener (`gardener`) | Assigned **Garden**; own requests only | Request irrigation water, see garden tank readings, report leaking irrigation pipes, read relevant notices |
+| Driver (`driver`) | Assigned **Transport**; own requests only | Request vehicle wash water, track own demand and assigned tanks, report water leaks, read relevant notices |
 
 Garden and Transport are new *facility types*. In **Admin → Buildings → Add
 campus location**, select **Garden** or **Transport**, give a name and a

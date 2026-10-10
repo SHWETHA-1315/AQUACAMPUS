@@ -155,14 +155,16 @@ test('worker can approve and fulfill valid requests, not bypass approval',async(
 });
 test('warden requests limited to own hostel',async()=>{
   const db=context('warden','warden@campus.test');
-  await assertSucceeds(getDoc(doc(db,path('requests','request-1'))));
+  await assertFails(getDoc(doc(db,path('requests','request-1'))));
   await assertFails(setDoc(doc(db,path('requests','canteen-attempt')),
     {...waterRequest('warden'),facilityId:'canteen-1'}));
 });
-test('warden sees only their assigned hostel requests by facility query',async()=>{
+test('warden cannot see any other resident requests, even from own hostel',async()=>{
   const db=context('warden','warden@campus.test');
-  await assertSucceeds(getDocs(query(collection(db,'campuses/main/requests'),
+  await assertFails(getDocs(query(collection(db,'campuses/main/requests'),
     where('facilityId','==','hostel-1'))));
+  await assertSucceeds(getDocs(query(collection(db,'campuses/main/requests'),
+    where('requestedBy','==','warden'))));
   await assertFails(getDocs(collection(db,'campuses/main/requests')));
 });
 test('canteen daily usage cap cannot be bypassed',async()=>{
@@ -179,7 +181,8 @@ test('SOS can be reported but only staff can read incident details',async()=>{
     detail:'Water leakage at the pipe',createdBy:'student',
     createdByName:'Student',status:'open',createdAt:time,resolvedAt:''};
   await assertSucceeds(setDoc(doc(student,path('sos','incident-1')),report));
-  await assertFails(getDoc(doc(student,path('sos','incident-1'))));
+  await assertSucceeds(getDoc(doc(student,path('sos','incident-1'))));
+  await assertFails(getDoc(doc(context('second','second@campus.test'),path('sos','incident-1'))));
   await assertSucceeds(getDoc(doc(worker,path('sos','incident-1'))));
   await assertSucceeds(updateDoc(doc(worker,path('sos','incident-1')),
     {status:'resolved',resolvedBy:'worker',resolvedAt:time}));
@@ -351,8 +354,10 @@ test('canteen, gardener and driver see only assigned site water requests', async
       {...waterRequest(id),facilityId:site,activity,room:''}));
     await assertFails(setDoc(doc(db,path('requests',id+'-cross')),
       {...waterRequest(id),facilityId:'hostel-1',room:''}));
-    await assertSucceeds(getDocs(query(collection(db,'campuses/main/requests'),
+    await assertFails(getDocs(query(collection(db,'campuses/main/requests'),
       where('facilityId','==',site))));
+    await assertSucceeds(getDocs(query(collection(db,'campuses/main/requests'),
+      where('requestedBy','==',id))));
     await assertFails(getDocs(collection(db,'campuses/main/requests')));
     await assertFails(getDoc(doc(db,path('requests','request-1'))));
     await assertFails(updateDoc(doc(db,path('requests',id+'-own')),{

@@ -162,6 +162,10 @@ class CampusStore extends ChangeNotifier {
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   final Map<String, bool> _streamOnline = <String, bool>{};
   StreamSubscription<dynamic>? _dailyUsageSubscription;
+  // Non-operators subscribe only to their authorized notice audiences.
+  final Map<String, StreamSubscription<dynamic>> _noticeSubscriptions = {};
+  final Map<String, List<Map<String, dynamic>>> _noticeParts = {};
+
   Timer? _dayRolloverTimer;
   String _currentUsageDay = dateKey();
   int _authGeneration = 0;
@@ -347,7 +351,9 @@ class CampusStore extends ChangeNotifier {
   List<Map<String, dynamic>> get visibleRequests =>
       requests.where((r) {
           if (isStaff) return true;
-          if (isAssignedSiteStaff) return r['facilityId'] == myFacilityId;
+          // Individual demand is private, even between people in the same
+          // hostel, garden, or canteen. Only assigned water operators/Admin
+          // can review other people's original requests.
           return r['requestedBy'] == uid;
         }).toList()
         ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
@@ -591,6 +597,8 @@ class CampusStore extends ChangeNotifier {
   }
 
   void _clearSubscriptions() {
+    _noticeSubscriptions.clear();
+    _noticeParts.clear();
     _dayRolloverTimer?.cancel();
     _dayRolloverTimer = null;
     _dailyUsageSubscription?.cancel();
@@ -797,30 +805,72 @@ class CampusStore extends ChangeNotifier {
     message = 'Cannot sync $collection. $reason';
   }
 
+  void _watchRoleNotices() {
+    if (isStaff) return;
+    final targets = <String>{'', if (myFacilityId.isNotEmpty) myFacilityId};
+    if (hasAcademicAccess) {
+      for (final f in facilities) {
+        if (['college', 'canteen'].contains(f['type'])) targets.add('${f['id']}');
+      }
+    }
+    // Handle assignment changes and newly added academic locations.
+    for (final key in _noticeSubscriptions.keys.toList()) {
+      if (targets.contains(key)) continue;
+      _noticeSubscriptions.remove(key)?.cancel();
+      _streamOnline.remove('notices-$key');
+      _noticeParts.remove(key);
+    }
+    for (final target in targets) {
+      if (_noticeSubscriptions.containsKey(target)) continue;
+      _noticeSubscriptions[target] = _watch(
+        'notices-$target',
+        (data) {
+          _noticeParts[target] = data;
+          final all = <String, Map<String, dynamic>>{};
+          for (final part in _noticeParts.values) {
+            for (final notice in part) { all['${notice['id']}'] = notice; }
+          }
+          notices = all.values.toList();
+        },
+        _col('notices').where('targetFacilityId', isEqualTo: target).limit(100),
+      );
+    }
+  }
+
   void _subscribeCloud() {
     final generation = _authGeneration;
-    _watch('facilities', (v) => facilities = v);
+    _watch('facilities', (v) {
+      facilities = v;
+      _watchRoleNotices();
+    });
     _watch('tanks', (v) => tanks = v);
     // Recent mobile feeds are bounded. Export/long-term history requires
     // explicit paging rather than loading every document at login.
-    _watch(
-      'notices',
-      (v) => notices = v,
-      _col('notices').orderBy('createdAt', descending: true).limit(100),
-    );
+    if (isStaff) {
+      _watch(
+        'notices',
+        (v) => notices = v,
+        _col('notices').orderBy('createdAt', descending: true).limit(100),
+      );
+    }
     _refreshDailyUsageStream();
     _scheduleDayRollover();
     Query<Map<String, dynamic>>? requestQuery;
     if (isStudent || hasAcademicAccess) {
       requestQuery = _col('requests').where('requestedBy', isEqualTo: uid);
     }
-    if (isAssignedSiteStaff) {
-      requestQuery = _col('requests')
-          .where('facilityId', isEqualTo: myFacilityId);
+    // Restrict *every* non-operator request listener at the server.
+    if (!isStaff) {
+      requestQuery = _col('requests').where('requestedBy', isEqualTo: uid);
     }
     _watch('requests', (v) => requests = v, requestQuery);
     if (isStaff) {
       _watch('sos', (v) => sos = v);
+    } else {
+      _watch('sos', (v) => sos = v,
+          _col('sos').where('createdBy', isEqualTo: uid).limit(100));
+    }
+    if (isStaff) {
       _watch(
         'tankReadings',
         (v) => tankReadings = v,
