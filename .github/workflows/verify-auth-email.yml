@@ -1,0 +1,48 @@
+name: Diagnose AQUACAMPUS Firebase Verification Email
+
+# Read-only. Requires firebase-production environment authorization.
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: 'Type aquacampus-ed284 to confirm which Firebase backend to inspect'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify-email-config:
+    if: github.repository == 'SHWETHA-1315/AQUACAMPUS' && inputs.project == 'aquacampus-ed284'
+    runs-on: ubuntu-latest
+    environment: firebase-production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm Firebase owner-authorized workload identity
+        env:
+          WIF_PROVIDER: ${{ vars.FIREBASE_WIF_PROVIDER }}
+          DEPLOY_SA: ${{ vars.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          [[ -n "$WIF_PROVIDER" && -n "$DEPLOY_SA" ]] || {
+            echo "::error::Ask the Firebase project owner to set Firebase WIF environment variables."
+            exit 1
+          }
+      - uses: google-github-actions/auth@v3
+        with:
+          project_id: aquacampus-ed284
+          workload_identity_provider: ${{ vars.FIREBASE_WIF_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check production email-verification configuration without changing anything
+        run: |
+          python -m pip install --quiet google-auth requests
+          python tools/check_verification_email.py
+          echo "Read-only Firebase email configuration audit completed." >> "$GITHUB_STEP_SUMMARY"
