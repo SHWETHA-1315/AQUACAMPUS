@@ -171,6 +171,7 @@ class CampusStore extends ChangeNotifier {
   int _authGeneration = 0;
 
   /// Every active feed must have delivered a fresh, server-backed snapshot.
+  bool get sosFeedOnline => _streamOnline['sos'] == true;
   bool get backendConnected =>
       cloud &&
       signedIn &&

@@ -107,6 +107,15 @@ class CampusAlertCenter extends ChangeNotifier {
       _foreground = FirebaseMessaging.onMessage.listen((message) {
         if (_uid != store.uid) return;
         final type = message.data['kind'] ?? 'update';
+        // Foreground FCM SOS should also sound even if a non-SOS feed broke.
+        if (type == 'sos' && store.isWorker &&
+            message.data['eventId']?.startsWith('sos_') == true) {
+          final incidentId = message.data['eventId']!.substring(4);
+          if (_sirenStarted.add(incidentId)) {
+            native.invokeMethod<void>('startSiren',
+                {'uid': _uid, 'sosId': incidentId});
+          }
+        }
         _record('push:${message.messageId ?? DateTime.now().microsecondsSinceEpoch}',
             'Campus update',
             type == 'sos' ? 'A water emergency needs worker attention.' :
@@ -153,7 +162,20 @@ class CampusAlertCenter extends ChangeNotifier {
   void _sync() {
     final store = _store;
     if (store == null || !store.approved || store.uid != _uid ||
-        !store.backendConnected || _working) return;
+        _working) return;
+    // A broken tank/notice feed must never suppress a worker emergency.
+    // The incident snapshot itself must have come from the server.
+    if (store.isWorker && store.sosFeedOnline) {
+      for (final s in store.sos) {
+        final id = '${s['id']}';
+        if (s['status'] != 'open' || !_sirenStarted.add(id)) continue;
+        native.invokeMethod<void>('startSiren',
+            {'uid': _uid, 'sosId': id}).catchError((Object error) {
+          debugPrint('Siren service unavailable: ${error.runtimeType}');
+        });
+      }
+    }
+    if (!store.backendConnected) return;
     _working = true;
     try {
       final currentRequests = <String, String>{
@@ -209,17 +231,7 @@ class CampusAlertCenter extends ChangeNotifier {
       _tanks..clear()..addAll(currentTanks);
       _incidents..clear()..addAll(currentIncidents);
       _baseline = true;
-      // An unresolved alarm is urgent even when it was created before
-      // opening this app. Android remembers which SOS ids this worker muted.
-      if (store.isWorker) {
-        for (final e in currentIncidents.entries) {
-          if (e.value != 'open' || !_sirenStarted.add(e.key)) continue;
-          native.invokeMethod<void>('startSiren',
-              {'uid': _uid, 'sosId': e.key}).catchError((Object error) {
-            debugPrint('Siren service unavailable: ${error.runtimeType}');
-          });
-        }
-      }
+      // Emergency siren is handled above, independent of unrelated feeds.
     } finally {
       _working = false;
     }
