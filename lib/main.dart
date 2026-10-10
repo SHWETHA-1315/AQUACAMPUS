@@ -593,6 +593,8 @@ class ApprovalPage extends StatefulWidget {
 class _ApprovalPageState extends State<ApprovalPage> with WidgetsBindingObserver {
   Timer? _verificationCheckTimer;
   bool _verificationCheckRunning = false;
+  bool _appInForeground = true;
+  int _automaticChecks = 0;
 
   @override
   void initState() {
@@ -603,7 +605,16 @@ class _ApprovalPageState extends State<ApprovalPage> with WidgetsBindingObserver
     // page. The real verification result still comes from Firebase Auth.
     _verificationCheckTimer = Timer.periodic(
       const Duration(seconds: 30),
-      (_) => _checkVerification(),
+      (_) {
+        // Limit background network work and repeated Auth lookups. On a
+        // long wait, Refresh remains available even after this budget ends.
+        if (!_appInForeground || _automaticChecks >= 10 ||
+            widget.store.emailVerified || !widget.store.signedIn) {
+          return;
+        }
+        _automaticChecks++;
+        _checkVerification();
+      },
     );
   }
 
@@ -629,8 +640,10 @@ class _ApprovalPageState extends State<ApprovalPage> with WidgetsBindingObserver
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed || !widget.store.signedIn) return;
+    _appInForeground = state == AppLifecycleState.resumed;
+    if (!_appInForeground || !widget.store.signedIn) return;
     if (!widget.store.emailVerified) {
+      _automaticChecks = 0;
       _checkVerification(showError: true);
     } else {
       widget.store.retrySync();
