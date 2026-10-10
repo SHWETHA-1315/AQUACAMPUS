@@ -2358,6 +2358,7 @@ class FacilitiesPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: type,
                   decoration: const InputDecoration(labelText: 'Location type'),
                   items: [
