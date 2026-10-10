@@ -794,6 +794,12 @@ String _nice(String s) =>
       'resolved': 'Fixed',
       'teacher': 'Teacher (faculty)',
       'worker': 'Water worker',
+      'staff': 'College staff',
+      'canteen': 'Canteen staff',
+      'gardener': 'Gardener',
+      'driver': 'Driver',
+      'garden': 'Garden',
+      'transport': 'Transport',
     }[s] ??
     (s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}');
 
@@ -829,10 +835,10 @@ void showUsageHelp(BuildContext context) => showDialog<void>(
     title: const Text('How to use AQUACAMPUS'),
     content: const SingleChildScrollView(
       child: Text(
-        'Buildings: Admin adds hostels, college buildings and canteens.\n\n'
+        'Buildings: Admin adds hostels, college buildings, canteens, gardens and transport/vehicle wash areas.\n\n'
         'Water tanks: Admin adds the tank size. Admin or worker measures the water height and enters it in cm.\n\n'
         'Request water: Choose a building, activity and litres. Staff approve it. The worker marks it Delivered after supplying water.\n\n'
-        'People & roles: People register and verify their own email. Admin approves them and chooses Teacher for faculty, Worker for water staff, or their other role.\n\n'
+        'People & roles: Users register, verify email and wait for Admin. Admin assigns Student, Teacher, College Staff, Canteen Staff, Warden, Water Worker, Gardener or Driver, with a suitable location if needed.\n\n'
         'Today’s water plan: Shows water needs based on requests. Tank litres are estimates from manual measurements.\n\n'
         'Report a problem: Send a leak or damage report. For urgent help, call your campus office too.\n\n'
         'The old cloud icon was for reloading database data. This now happens when needed. If access fails, use Try again. Sign out is inside the menu.',
@@ -888,8 +894,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     final pages = [
       const NavItem('Overview', Icons.dashboard_rounded),
       const NavItem('Planner', Icons.event_note_rounded),
-      if (!s.isTeacher &&
-          (!s.isStudent || s.facility(s.myFacilityId)?['type'] == 'hostel'))
+      if (s.isStaff || s.isWarden ||
+          (s.isStudent && s.facility(s.myFacilityId)?['type'] == 'hostel'))
         const NavItem('Rooms', Icons.meeting_room_outlined),
       const NavItem('Facilities', Icons.apartment_rounded),
       const NavItem('Tanks', Icons.water_rounded),
@@ -1403,6 +1409,7 @@ class OverviewPage extends StatelessWidget {
       title: 'Hello, ${s.name.split(' ').first} 👋',
       subtitle: '${_nice(s.role)} · Campus water management',
       children: [
+        InfoBanner(s.roleSummary),
         const SectionTitle('What do you want to do?'),
         LayoutBuilder(
           builder: (context, box) => Wrap(
@@ -1430,6 +1437,13 @@ class OverviewPage extends StatelessWidget {
                   const NavItem('SOS', Icons.report_problem_outlined),
                   const NavItem('Notices', Icons.campaign_outlined),
                   const NavItem('Planner', Icons.event_note_outlined),
+                ] else if (s.isCanteen || s.isGardener || s.isDriver) ...[
+                  const NavItem('Requests', Icons.water_drop_outlined),
+                  const NavItem('Planner', Icons.event_note_outlined),
+                  const NavItem('Tanks', Icons.water),
+                  const NavItem('Facilities', Icons.location_on_outlined),
+                  const NavItem('SOS', Icons.report_problem_outlined),
+                  const NavItem('Notices', Icons.campaign_outlined),
                 ] else ...[
                   const NavItem('Requests', Icons.water_drop_outlined),
                   const NavItem('SOS', Icons.report_problem_outlined),
@@ -1723,7 +1737,7 @@ class PlannerPage extends StatelessWidget {
           (sum, r) => sum + nval(r['approvedLitres']).toDouble(),
         );
     final pending = requestsToday.where((r) => r['status'] == 'pending').length;
-    final fullVisibility = s.isStaff || s.isWarden;
+    final fullVisibility = s.isStaff || s.isAssignedSiteStaff;
     return ScreenBody(
       title: 'Today’s water plan',
       subtitle: '$today · See how much water people need today.',
@@ -2085,10 +2099,20 @@ class FacilitiesPage extends StatelessWidget {
           )
         : null,
     children: [
-      for (final type in facilityTypes) ...[
-        SectionTitle('${_nice(type)}${type == 'college' ? ' blocks' : 's'}'),
+      for (final type in facilityTypes.where(
+        (t) => store.isAdmin || store.visibleFacilities.any((f) => f['type'] == t),
+      )) ...[
+        SectionTitle(
+          switch (type) {
+            'college' => 'College blocks',
+            'garden' => 'Garden & irrigation areas',
+            'transport' => 'Transport & vehicle wash',
+            'canteen' => 'Canteens',
+            _ => 'Hostels',
+          },
+        ),
         if (!store.visibleFacilities.any((f) => f['type'] == type))
-          _empty('No $type assigned'),
+          _empty('No $type created yet'),
         for (final f in store.visibleFacilities.where((f) => f['type'] == type))
           Surface(
             child: Column(
@@ -2797,7 +2821,7 @@ class RequestsPage extends StatelessWidget {
     final list = store.visibleRequests;
     return ScreenBody(
       title: 'Water requests',
-      subtitle: 'Ask for water. Staff approve it, then a worker records the delivery.',
+      subtitle: 'Request water for your assigned location. Workers and Admins manage supply.',
       action: FilledButton.icon(
         onPressed: () => _request(context),
         icon: const Icon(Icons.add),
@@ -2929,12 +2953,18 @@ class RequestsPage extends StatelessWidget {
     final choices = store.visibleFacilities;
     if (choices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Admin must assign a facility first')),
+        const SnackBar(content: Text('Ask Admin to assign your hostel, canteen, garden, transport or college location first.')),
       );
       return;
     }
     String facilityId = '${choices.first['id']}';
-    String? activity;
+    String? activity = store.isGardener
+        ? 'Garden irrigation'
+        : store.isDriver
+        ? 'Vehicle washing'
+        : store.isCanteen
+        ? 'Cooking'
+        : null;
     final people = TextEditingController(),
         rate = TextEditingController(),
         notes = TextEditingController();
@@ -3242,16 +3272,7 @@ class SOSPage extends StatelessWidget {
   Future<void> _report(BuildContext context) async {
     // A hostel student may report a leak from any academic building or canteen,
     // while hostel incidents remain limited to the assigned hostel.
-    final locations = store.isStudent
-        ? store.facilities
-              .where(
-                (f) =>
-                    f['id'] == store.myFacilityId ||
-                    f['type'] == 'college' ||
-                    f['type'] == 'canteen',
-              )
-              .toList()
-        : store.visibleFacilities;
+    final locations = store.reportableFacilities;
     if (locations.isEmpty) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('No location assigned')));
@@ -3497,7 +3518,7 @@ class MembersPage extends StatelessWidget {
             '1. Ask them to tap Register on the login page.\n\n'
             '2. They enter their own name, email and password, then open the email verification link.\n\n'
             '3. Come back to People & roles. Tap Assign / Approve next to their name.\n\n'
-            '4. Choose Teacher, Worker, Warden, or Student. Turn on Approve member and save.\n\n'
+            '4. Choose Student, Teacher, Staff, Canteen Staff, Warden, Worker, Gardener or Driver. Select a location, switch on Approve member and Save.\n\n'
             'To activate TWO Admin accounts, ask the Firebase project owner to verify and approve both accounts securely.',
           ),
           actions: [
@@ -3517,7 +3538,7 @@ class MembersPage extends StatelessWidget {
         warning: store.adminCount != 2,
       ),
       const InfoBanner(
-        'To add a student, teacher, warden or water worker: ask them to register and verify their email. Then choose Assign / Approve and select their role and location. Administrator promotion requires trusted project-owner activation.',
+        'Add Student, Teacher, Staff, Canteen Staff, Warden, Water Worker, Gardener or Driver: each registers and verifies email; Admin selects their role and assigned site. Gardeners need a Garden area; Drivers a Transport area; Canteen staff a Canteen. Admin promotion stays project-owner-only.',
       ),
       if (store.people.isEmpty)
         _empty('New people appear here after they register in the app.'),
@@ -3593,7 +3614,13 @@ class MembersPage extends StatelessWidget {
                     for (final r in roleNames.where((value) => value != 'admin'))
                       DropdownMenuItem(value: r, child: Text(_nice(r))),
                   ],
-                  onChanged: (v) => setDialog(() => role = v ?? role),
+                  onChanged: (v) => setDialog(() {
+                    role = v ?? role;
+                    final needed = requiredFacilityTypeForRole(role);
+                    if (needed != null && store.facility(facilityId)?['type'] != needed) {
+                      facilityId = '';
+                    }
+                  }),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
@@ -3609,7 +3636,9 @@ class MembersPage extends StatelessWidget {
                       value: '',
                       child: Text('None / all buildings'),
                     ),
-                    for (final f in store.facilities)
+                    for (final f in store.facilities.where((f) =>
+                        requiredFacilityTypeForRole(role) == null ||
+                        f['type'] == requiredFacilityTypeForRole(role)))
                       DropdownMenuItem(
                         value: '${f['id']}',
                         child: Text('${f['name']}', overflow: TextOverflow.ellipsis, maxLines: 1),
@@ -3635,13 +3664,15 @@ class MembersPage extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (approved &&
-                    ((role == 'student' && store.facility(facilityId) == null) ||
-                     (role == 'warden' &&
-                      store.facility(facilityId)?['type'] != 'hostel'))) {
+                if (!validRoleFacilityAssignment(
+                  role, approved, facilityId, store.facility(facilityId)?['type'] as String?,
+                )) {
+                  final requiredSite = requiredFacilityTypeForRole(role);
                   ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(
-                      content: Text('Assign a student to a building or hostel, or a warden to a hostel.'),
+                    SnackBar(
+                      content: Text(requiredSite == null
+                          ? 'Select a valid building before approving this member.'
+                          : 'Assign ${_nice(role)} to a valid ${_nice(requiredSite)} location.'),
                     ),
                   );
                   return;
