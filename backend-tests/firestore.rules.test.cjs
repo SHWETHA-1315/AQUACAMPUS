@@ -262,3 +262,60 @@ test('neither co-admin can demote the other or promote a third administrator', a
   }));
   await assertFails(updateDoc(doc(admin2,'users','admin2'),{approved:false}));
 });
+
+test('email verification is required even AFTER an Admin approves a member',async()=>{
+  const admin=context('admin','admin@campus.test');
+  await assertSucceeds(updateDoc(doc(admin,'users','pending'),{
+    approved:true,role:'student',facilityId:'hostel-1',room:'105'
+  }));
+  const unverified=context('pending','pending@campus.test',false);
+  const verified=context('pending','pending@campus.test',true);
+  await assertSucceeds(getDoc(doc(unverified,'users','pending')));
+  await assertFails(getDoc(doc(unverified,path('facilities','hostel-1'))));
+  await assertFails(setDoc(doc(unverified,path('requests','not-verified')),
+    {...waterRequest('pending'),room:'105'}));
+  await assertSucceeds(getDoc(doc(verified,path('facilities','hostel-1'))));
+  await assertSucceeds(setDoc(doc(verified,path('requests','after-verified')),
+    {...waterRequest('pending'),room:'105'}));
+});
+
+test('partial registration recovery cannot spoof identities or elevated privileges',async()=>{
+  const user=context('recovery','recovery@campus.test',false);
+  const valid={...profile('recovery@campus.test','student',false,''),
+    room:''};
+  await assertSucceeds(setDoc(doc(user,'users','recovery'),valid));
+  await assertFails(setDoc(doc(user,'users','recovery'),{...valid,role:'admin'}));
+  await assertFails(setDoc(doc(user,'users','other'),valid));
+  await assertFails(setDoc(doc(user,'users','recovery-extra'),{...valid,
+    isAdmin:true}));
+  await assertFails(setDoc(doc(user,'users','recovery-identity'),{...valid,
+    email:'someoneelse@campus.test'}));
+});
+
+test('registration profile rejects unexpected fields and invalid names',async()=>{
+  const user=context('checkreg','checkreg@campus.test',false);
+  const valid={...profile('checkreg@campus.test','student',false,''),
+    room:''};
+  await assertFails(setDoc(doc(user,'users','checkreg'),{...valid,
+    isCampusOwner:true}));
+  await assertFails(setDoc(doc(user,'users','checkreg'),{...valid,name:'X'}));
+  await assertFails(setDoc(doc(user,'users','checkreg'),{...valid,createdAt:0}));
+  await assertSucceeds(setDoc(doc(user,'users','checkreg'),valid));
+});
+
+test('both Admins can approve staff but cannot approve unassigned students or non-hostel wardens',async()=>{
+  const admin1=context('admin','admin@campus.test');
+  const admin2=context('admin2','admin2@campus.test');
+  await assertFails(updateDoc(doc(admin1,'users','pending'),{
+    approved:true,role:'student',facilityId:'',room:''
+  }));
+  await assertFails(updateDoc(doc(admin2,'users','pending'),{
+    approved:true,role:'warden',facilityId:'canteen-1',room:''
+  }));
+  await assertSucceeds(updateDoc(doc(admin1,'users','pending'),{
+    approved:true,role:'worker',facilityId:'',room:''
+  }));
+  await assertSucceeds(updateDoc(doc(admin2,'users','pending'),{
+    approved:true,role:'warden',facilityId:'hostel-1',room:'105'
+  }));
+});
