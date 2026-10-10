@@ -3536,6 +3536,7 @@ class MembersPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: role,
                   decoration: const InputDecoration(labelText: 'Role'),
                   items: [
@@ -3546,6 +3547,7 @@ class MembersPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: store.facility(facilityId) == null
                       ? ''
                       : facilityId,
@@ -3560,7 +3562,7 @@ class MembersPage extends StatelessWidget {
                     for (final f in store.facilities)
                       DropdownMenuItem(
                         value: '${f['id']}',
-                        child: Text('${f['name']}'),
+                        child: Text('${f['name']}', overflow: TextOverflow.ellipsis, maxLines: 1),
                       ),
                   ],
                   onChanged: (v) =>
