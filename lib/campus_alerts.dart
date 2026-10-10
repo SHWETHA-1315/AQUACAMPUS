@@ -268,6 +268,26 @@ class CampusAlertCenter extends ChangeNotifier {
         'Siren silenced', 'This phone is muted for already received SOS alerts.');
   }
 
+  /// Remove this device from the departing account so shared phones do not
+  /// receive pushes intended for a previous signed-in person.
+  Future<void> unregisterDevice() async {
+    final departing = _uid;
+    if (departing.isEmpty) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user?.uid != departing) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final id = _deviceId ?? prefs.getString('aqua-device-id');
+      if (id != null) {
+        await FirebaseFirestore.instance.collection('users').doc(departing)
+            .collection('devices').doc(id).delete();
+      }
+      await FirebaseMessaging.instance.deleteToken();
+    } catch (error) {
+      debugPrint('Device push opt-out unavailable: ${error.runtimeType}');
+    }
+  }
+
   Future<void> unbind() async {
     _store?.removeListener(_sync);
     _store = null;

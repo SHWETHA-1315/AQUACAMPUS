@@ -1096,7 +1096,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                 leading: const Icon(Icons.logout_rounded),
                 title: const Text('Sign out'),
                 subtitle: Text('${s.user['email'] ?? ''}'),
-                onTap: s.logout,
+                onTap: () async {
+                  await CampusAlertCenter.instance.unregisterDevice();
+                  await s.logout();
+                },
               ),
               const Padding(
                 padding: EdgeInsets.all(8),
